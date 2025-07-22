@@ -3,6 +3,7 @@
 
 (use-modules (ice-9 match)
              (ice-9 format)
+             (ice-9 threads)
              (srfi srfi-1)
              (srfi srfi-9))
 
@@ -23,92 +24,117 @@
         (assoc-set! function-registry name fn)))
 
 ;; Actor: Application
-(define (application-actor inbox outbox)
+(define (application-actor llm-channel)
   "Application actor that sends prompts and executes functions"
   (let loop ((state 'idle))
-    (match (receive-message inbox)
-      [($ <message> 'start prompt _)
-       ;; Send initial prompt with function definitions
-       (send-message outbox 
-                     (make-message 'prompt 
-                                   `((prompt . ,prompt)
-                                     (functions . ,(map car function-registry)))
-                                   'application))
+    (match state
+      ['idle
+       ;; Wait for startup signal
+       (loop 'ready)]
+      
+      ['ready
+       ;; This is triggered by run-simulation
        (loop 'waiting-for-response)]
       
-      [($ <message> 'function-call (name . args) 'llm)
-       ;; Execute requested function
-       (let* ((fn (assoc-ref function-registry name))
-              (result (if fn
-                          (apply fn args)
-                          `(error . ,(format #f "Unknown function: ~a" name)))))
-         (send-message outbox
-                       (make-message 'function-result
-                                     `((function . ,name)
-                                       (result . ,result))
-                                     'application))
-         (loop 'waiting-for-final))]
+      ['waiting-for-response
+       ;; Receive from LLM
+       (let ((msg (receive-message llm-channel)))
+         (match msg
+           [($ <message> 'function-call content 'llm)
+            ;; Execute requested function
+            (let* ((name (car content))
+                   (args (cdr content))
+                   (fn (assoc-ref function-registry name))
+                   (result (if fn
+                               (apply fn args)
+                               `(error . ,(format #f "Unknown function: ~a" name)))))
+              (send-message llm-channel
+                            (make-message 'function-result
+                                          `((function . ,name)
+                                            (result . ,result))
+                                          'application))
+              (loop 'waiting-for-final))]
+           
+           [($ <message> 'final-answer answer 'llm)
+            (format #t "Final Answer: ~a~%" answer)
+            (loop 'complete)]
+           
+           [msg
+            (format #t "Application: Unexpected message ~a~%" msg)
+            (loop state)]))]
       
-      [($ <message> 'final-answer answer 'llm)
-       (format #t "Final Answer: ~a~%" answer)
-       (loop 'complete)]
+      ['waiting-for-final
+       ;; Receive final answer from LLM
+       (let ((msg (receive-message llm-channel)))
+         (match msg
+           [($ <message> 'final-answer answer 'llm)
+            (format #t "Final Answer: ~a~%" answer)
+            (loop 'complete)]
+           
+           [msg
+            (format #t "Application: Unexpected message ~a~%" msg)
+            (loop state)]))]
       
-      [msg
-       (format #t "Application: Unexpected message ~a in state ~a~%" msg state)
-       (loop state)])))
+      ['complete
+       ;; Done
+       #t])))
 
 ;; Actor: LLM Provider
-(define (llm-actor inbox outbox)
+(define (llm-actor app-channel prompt)
   "LLM actor that processes prompts and decides on actions"
-  (let loop ((context '()))
-    (match (receive-message inbox)
-      [($ <message> 'prompt content 'application)
-       (let ((prompt (assoc-ref content 'prompt))
-             (functions (assoc-ref content 'functions)))
-         ;; Simulate decision making
-         (cond
-           [(string-contains prompt "calculate")
-            ;; Decide to call a function
-            (send-message outbox
-                          (make-message 'function-call
-                                        '(calculate . (5 3))
-                                        'llm))]
-           [else
-            ;; Direct response
-            (send-message outbox
-                          (make-message 'final-answer
-                                        "I'll help you with that."
-                                        'llm))])
-         (loop `((prompt . ,prompt) . ,context)))]
-      
-      [($ <message> 'function-result content 'application)
-       (let ((result (assoc-ref content 'result)))
-         ;; Incorporate function result and generate final answer
-         (send-message outbox
-                       (make-message 'final-answer
-                                     (format #f "Based on the calculation, the result is: ~a" result)
-                                     'llm))
-         (loop `((last-result . ,result) . ,context)))]
-      
-      [msg
-       (format #t "LLM: Unexpected message ~a~%" msg)
-       (loop context)])))
+  ;; Send initial prompt analysis
+  (let ((functions (map car function-registry)))
+    ;; Simulate decision making
+    (cond
+      [(string-contains prompt "calculate")
+       ;; Decide to call a function
+       (send-message app-channel
+                     (make-message 'function-call
+                                   '(calculate . (5 3))
+                                   'llm))
+       ;; Wait for function result
+       (let ((result-msg (receive-message app-channel)))
+         (match result-msg
+           [($ <message> 'function-result content 'application)
+            (let ((result (assoc-ref content 'result)))
+              ;; Incorporate function result and generate final answer
+              (send-message app-channel
+                            (make-message 'final-answer
+                                          (format #f "Based on the calculation, the result is: ~a" result)
+                                          'llm)))]
+           [msg
+            (format #t "LLM: Unexpected message while waiting for result: ~a~%" msg)]))]
+      [else
+       ;; Direct response
+       (send-message app-channel
+                     (make-message 'final-answer
+                                   "I'll help you with that."
+                                   'llm))])))
 
 ;; Message passing infrastructure
 (define (make-channel)
-  "Create a bidirectional channel"
-  (cons (make-queue) (make-queue)))
+  "Create a thread-safe channel"
+  (let ((queue (make-queue))
+        (mutex (make-mutex))
+        (condvar (make-condition-variable)))
+    (list queue mutex condvar)))
 
 (define (send-message channel msg)
   "Send a message to a channel"
-  (enqueue! (car channel) msg))
+  (match channel
+    [(queue mutex condvar)
+     (with-mutex mutex
+       (enqueue! queue msg)
+       (signal-condition-variable condvar))]))
 
 (define (receive-message channel)
   "Blocking receive from a channel"
-  (let loop ()
-    (if (queue-empty? (cdr channel))
-        (begin (usleep 1000) (loop))
-        (dequeue! (cdr channel)))))
+  (match channel
+    [(queue mutex condvar)
+     (with-mutex mutex
+       (while (queue-empty? queue)
+         (wait-condition-variable condvar mutex))
+       (dequeue! queue))]))
 
 ;; Example functions available to LLM
 (register-function! 'calculate
@@ -122,24 +148,23 @@
 ;; Simulation runner
 (define (run-simulation prompt)
   "Run a complete function calling simulation"
-  (let ((app-to-llm (make-channel))
-        (llm-to-app (cons (cdr app-to-llm) (car app-to-llm))))
+  (let ((channel (make-channel)))
     
-    ;; Start actors in separate threads
-    (call-with-new-thread
-     (lambda ()
-       (application-actor llm-to-app app-to-llm)))
-    
-    (call-with-new-thread
-     (lambda ()
-       (llm-actor app-to-llm llm-to-app)))
-    
-    ;; Initiate conversation
-    (send-message app-to-llm
-                  (make-message 'start prompt 'user))
-    
-    ;; Wait for completion
-    (sleep 2)))
+    ;; Start application actor
+    (let ((app-thread
+           (call-with-new-thread
+            (lambda ()
+              (application-actor channel)))))
+      
+      ;; Start LLM actor
+      (let ((llm-thread
+             (call-with-new-thread
+              (lambda ()
+                (llm-actor channel prompt)))))
+        
+        ;; Wait for completion
+        (join-thread llm-thread)
+        (join-thread app-thread)))))
 
 ;; Queue implementation
 (define (make-queue)

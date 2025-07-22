@@ -1,5 +1,8 @@
 .PHONY: all run demo test clean help
 
+# Use gmake if available
+MAKE := gmake
+
 # Default target
 all: help
 
