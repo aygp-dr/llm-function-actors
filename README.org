@@ -1,9 +1,28 @@
 #+TITLE: LLM Function Calling Pattern - Two Actor System
 #+PROPERTY: header-args :mkdirp yes :comments both
 
-* LLM Function Calling Pattern - Two Actor System
+[[https://img.shields.io/badge/language-Guile%20Scheme-blue.svg]]
+[[https://img.shields.io/badge/license-MIT-green.svg]]
+[[https://img.shields.io/badge/platform-GNU%2FLinux-lightgrey.svg]]
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
+
+#+begin_src mermaid :file actor-sequence.png :exports results
+sequenceDiagram
+    participant App as Application Actor
+    participant LLM as LLM Actor
+    
+    App->>LLM: Initial Request + Functions
+    LLM->>LLM: Analyze & Decide
+    alt Function Call Needed
+        LLM->>App: Function Call Request
+        App->>App: Execute Function
+        App->>LLM: Function Result
+        LLM->>App: Final Answer with Result
+    else Direct Response
+        LLM->>App: Final Answer
+    end
+#+end_src
 
 ** Overview
 

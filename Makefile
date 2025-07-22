@@ -1,4 +1,4 @@
-.PHONY: all run demo test lint clean tangle detangle deps help
+.PHONY: all run demo test lint lint-scheme lint-org lint-shell clean tangle detangle deps help
 
 # Use gmake if available
 MAKE := gmake
@@ -21,10 +21,45 @@ test:
 	@echo "Running tests..."
 	@echo "TODO: Add test suite"
 
+# Lint all file types
+lint: lint-scheme lint-org lint-shell
+	@echo ""
+	@echo "=== All linting complete ==="
+
 # Lint Scheme files
-lint:
-	@echo "Linting Scheme files..."
-	@find . -name "*.scm" -exec guile -c "(use-modules (ice-9 format)) (load \"{}\")" \; 2>&1 | grep -E "(error|warning)" || echo "No syntax errors found"
+lint-scheme:
+	@echo "=== Linting Scheme files ==="
+	@for file in $$(find . -name "*.scm" -type f); do \
+		echo "  Checking $$file..."; \
+		guile -c "(primitive-load \"$$file\")" 2>&1 | grep -E "(error|warning)" || true; \
+	done
+	@echo "✓ Scheme linting complete"
+
+# Lint Org files
+lint-org:
+	@echo "=== Linting Org files ==="
+	@if command -v emacs >/dev/null 2>&1; then \
+		for file in $$(find . -name "*.org" -type f); do \
+			echo "  Checking $$file..."; \
+			emacs --batch --eval "(progn (require 'org) (find-file \"$$file\") (org-lint) (kill-emacs))" 2>&1 | grep -v "Loading" | grep -E "(warning|error)" || true; \
+		done; \
+		echo "✓ Org linting complete"; \
+	else \
+		echo "⚠ Emacs not available for Org linting"; \
+	fi
+
+# Lint Shell scripts and Makefile
+lint-shell:
+	@echo "=== Linting Shell scripts ==="
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		find . -name "*.sh" -o -name "*.bash" | xargs -r shellcheck || true; \
+		echo "✓ Shell linting complete"; \
+	else \
+		echo "⚠ shellcheck not installed"; \
+	fi
+	@echo ""
+	@echo "=== Checking Makefile ==="
+	@gmake -n -f Makefile > /dev/null 2>&1 && echo "✓ Makefile syntax OK" || echo "✗ Makefile has syntax errors"
 
 # Clean generated files
 clean:
@@ -55,18 +90,22 @@ deps:
 help:
 	@echo "LLM Function Calling Pattern - Makefile targets:"
 	@echo ""
-	@echo "  gmake run      - Run the main function calling simulator"
-	@echo "  gmake demo     - Run the demo examples"
-	@echo "  gmake test     - Run tests (TODO)"
-	@echo "  gmake lint     - Lint Scheme files for syntax errors"
-	@echo "  gmake clean    - Clean generated files"
-	@echo "  gmake tangle   - Tangle code from README.org"
-	@echo "  gmake detangle - Update README.org from tangled files"
-	@echo "  gmake deps     - Check dependencies"
-	@echo "  gmake help     - Show this help message"
+	@echo "  gmake run         - Run the main function calling simulator"
+	@echo "  gmake demo        - Run the demo examples"
+	@echo "  gmake test        - Run tests (TODO)"
+	@echo "  gmake lint        - Lint all files (Scheme, Org, Shell)"
+	@echo "  gmake lint-scheme - Lint only Scheme files"
+	@echo "  gmake lint-org    - Lint only Org files"
+	@echo "  gmake lint-shell  - Lint only Shell scripts and Makefile"
+	@echo "  gmake clean       - Clean generated files"
+	@echo "  gmake tangle      - Tangle code from README.org"
+	@echo "  gmake detangle    - Update README.org from tangled files"
+	@echo "  gmake deps        - Check dependencies"
+	@echo "  gmake help        - Show this help message"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - GNU Guile 3.0+ installed"
 	@echo "  - ice-9 and srfi modules available"
-	@echo "  - Emacs (optional, for tangling)"
+	@echo "  - Emacs (optional, for tangling and Org linting)"
+	@echo "  - shellcheck (optional, for shell script linting)"
 	@echo "  - Mermaid CLI (optional, for diagrams)"
