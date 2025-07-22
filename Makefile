@@ -114,6 +114,11 @@ detangle: ## Update README.org from tangled files
 	@echo "Detangling README.org..."
 	@emacs --batch --eval "(require 'org)" --eval "(org-babel-detangle \"README.org\")"
 
+.PHONY: diagrams
+diagrams: ## Generate diagram images (requires mermaid-cli)
+	@echo "Generating diagrams..."
+	@scripts/generate-diagrams.sh
+
 ##@ Utilities
 
 .PHONY: deps
