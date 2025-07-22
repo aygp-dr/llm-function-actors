@@ -1,3 +1,6 @@
+#+TITLE: LLM Function Calling Pattern - Two Actor System
+#+PROPERTY: header-args :mkdirp yes :comments both
+
 * LLM Function Calling Pattern - Two Actor System
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
