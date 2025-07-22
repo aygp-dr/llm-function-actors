@@ -1,0 +1,10 @@
+#!/bin/sh
+# Launch the file tools simulator
+
+# Find the script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Run the file tools simulator
+exec guile -L "$PROJECT_ROOT/src" \
+  -c "(primitive-load \"$PROJECT_ROOT/src/file-tools-simulator.scm\")"

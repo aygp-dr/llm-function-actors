@@ -1,0 +1,10 @@
+#!/bin/sh
+# Launch the LLM function calling simulator
+
+# Find the script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Run the simulator
+exec guile -L "$PROJECT_ROOT/src" \
+  -c "(primitive-load \"$PROJECT_ROOT/src/function-calling-simulator.scm\")"

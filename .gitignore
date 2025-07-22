@@ -22,6 +22,9 @@ Thumbs.db
 /build/
 /dist/
 
+# Don't ignore source bin directory
+!/bin/
+
 # Temporary files
 /tmp/
 *.tmp

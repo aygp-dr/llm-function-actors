@@ -57,14 +57,12 @@ clean:
 # Build bytecode
 build:
 	@echo "Building Guile bytecode..."
-	@mkdir -p build/bin build/lib
+	@mkdir -p build/lib
 	@echo "Compiling Scheme files..."
 	@guild compile -o build/lib/function-calling-simulator.go src/function-calling-simulator.scm
 	@guild compile -o build/lib/file-tools-simulator.go src/file-tools-simulator.scm
-	@echo "Creating launcher scripts..."
-	@echo '#!/bin/sh' > build/bin/llm-function-actors
-	@echo 'exec guile -L "$$(dirname "$$0")/../lib" -c "(primitive-load \"$$(dirname \"$$0\")/../lib/function-calling-simulator.go\")"' >> build/bin/llm-function-actors
-	@chmod +x build/bin/llm-function-actors
+	@echo "Copying scripts..."
+	@cp -r bin build/
 	@echo "Build complete in build/"
 
 # Create distribution package
