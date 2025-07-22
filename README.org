@@ -7,20 +7,43 @@
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
 
-#+begin_src mermaid :file actor-sequence.png :exports results
+#+begin_src mermaid :file llm-function-calling-flow.png :exports results
 sequenceDiagram
+    participant User
     participant App as Application Actor
     participant LLM as LLM Actor
+    participant Registry as Function Registry
     
-    App->>LLM: Initial Request + Functions
-    LLM->>LLM: Analyze & Decide
-    alt Function Call Needed
-        LLM->>App: Function Call Request
+    Note over User,Registry: Setup Phase
+    App->>Registry: Register Functions
+    Registry-->>App: Functions Available
+    
+    Note over User,Registry: Interaction Phase
+    User->>App: Send Prompt
+    App->>App: Add Function Definitions
+    App->>LLM: Prompt + Available Functions
+    
+    Note over LLM: Decision Point
+    alt Needs Function
+        LLM->>App: Request Function Call<br/>(name + arguments)
+        App->>Registry: Lookup Function
+        Registry-->>App: Function Reference
         App->>App: Execute Function
-        App->>LLM: Function Result
-        LLM->>App: Final Answer with Result
-    else Direct Response
+        App->>LLM: Return Result
+        LLM->>LLM: Process Result
         LLM->>App: Final Answer
+    else Direct Answer
+        LLM->>App: Final Answer
+    end
+    
+    App->>User: Response
+    
+    Note over User,Registry: Optional: Multiple Function Calls
+    opt Additional Tools Needed
+        LLM->>App: Request Another Function
+        App->>App: Execute
+        App->>LLM: Result
+        Note right of LLM: Loop until complete
     end
 #+end_src
 
