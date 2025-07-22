@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y guile-3.0 guile-3.0-dev
+        
+    - name: Check dependencies
+      run: gmake deps || make deps
+      
+    - name: Run linting
+      run: gmake lint-scheme || make lint-scheme
+      
+    - name: Run demos
+      run: |
+        gmake demo || make demo
+        gmake demo-file-tools || make demo-file-tools
+      timeout-minutes: 1
+      
+    - name: Build
+      run: gmake build || make build
+      
+    - name: Create distribution
+      run: gmake dist || make dist
+      
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: llm-function-actors-linux
+        path: dist/*.tar.gz
+
+  test-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        brew install guile
+        brew install coreutils # for gmake
+        
+    - name: Check dependencies
+      run: gmake deps || make deps
+      
+    - name: Run linting
+      run: gmake lint-scheme || make lint-scheme
+      
+    - name: Run demos
+      run: |
+        gmake demo || make demo
+        gmake demo-file-tools || make demo-file-tools
+      timeout-minutes: 1
+      
+    - name: Build
+      run: gmake build || make build
+
+  test-freebsd:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Test on FreeBSD
+      uses: cross-platform-actions/action@v0.23.0
+      with:
+        operating_system: freebsd
+        version: '14.0'
+        run: |
+          sudo pkg update
+          sudo pkg install -y guile3 gmake
+          gmake deps
+          gmake lint-scheme
+          gmake demo
+          gmake build

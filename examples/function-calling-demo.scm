@@ -1,7 +1,10 @@
 #!/usr/bin/env guile
 !#
 
-(load "../src/function-calling-simulator.scm")
+;; Load from relative path when run from project root
+(primitive-load (string-append 
+                 (dirname (current-filename))
+                 "/../src/function-calling-simulator.scm"))
 
 ;; Register additional functions
 (register-function! 'weather

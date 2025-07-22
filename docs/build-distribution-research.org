@@ -1,0 +1,116 @@
+* Build and Distribution Options for Guile Scheme
+
+** Binary Distribution Options
+
+*** 1. Guild Compile (Native Guile Approach)
+- Use =guild compile= to create bytecode (.go files)
+- Pros: Fast loading, platform independent bytecode
+- Cons: Still requires Guile runtime
+#+begin_src bash
+guild compile -o simulator.go src/function-calling-simulator.scm
+#+end_src
+
+*** 2. Guile Static Linking
+- Link Guile statically with the application
+- Pros: Single executable, no runtime dependency
+- Cons: Large binary size (~20-30MB), complex build process
+- Tools: =guile-config=, custom C wrapper
+
+*** 3. Guix Pack
+- Create relocatable binary bundles using GNU Guix
+- Pros: Includes all dependencies, truly portable
+- Cons: Requires Guix, large bundle size
+#+begin_src bash
+guix pack -RR -S /bin=bin guile@3.0 guile-lib
+#+end_src
+
+*** 4. AppImage for Linux
+- Package as AppImage with Guile runtime included
+- Pros: Single file, works across Linux distros
+- Cons: Linux-only, requires AppImage tools
+
+*** 5. Docker Container
+- Ship as minimal Docker image
+- Pros: Universal compatibility, easy deployment
+- Cons: Requires Docker runtime
+#+begin_src dockerfile
+FROM alpine:latest
+RUN apk add --no-cache guile
+COPY . /app
+ENTRYPOINT ["guile", "/app/src/function-calling-simulator.scm"]
+#+end_src
+
+** CI/CD Options
+
+*** 1. GitHub Actions (Recommended)
+- Free for public repos
+- Good FreeBSD and Linux support
+- Matrix builds for multiple platforms
+#+begin_src yaml
+name: Build and Test
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Guile
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y guile-3.0
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install guile
+          fi
+      - name: Run tests
+        run: make test
+      - name: Build
+        run: make build
+#+end_src
+
+*** 2. GitLab CI/CD
+- Built-in CI/CD with .gitlab-ci.yml
+- Good for self-hosted instances
+- Docker-based runners
+
+*** 3. Cirrus CI
+- Excellent FreeBSD support
+- Free for open source
+- Native FreeBSD builders
+#+begin_src yaml
+freebsd_task:
+  freebsd_instance:
+    image_family: freebsd-14-3
+  install_script: pkg install -y guile3
+  test_script: gmake test
+  build_script: gmake build
+#+end_src
+
+*** 4. SourceHut Builds
+- Simple, fast CI service
+- Good BSD support
+- Email-driven workflow
+
+** Recommended Approach
+
+For this project, I recommend:
+
+1. **Immediate**: Guild compile for bytecode distribution
+2. **Short-term**: GitHub Actions for CI/CD with matrix builds
+3. **Long-term**: Guix pack or Docker for truly portable binaries
+
+** Implementation Plan
+
+1. Add =gmake build= target that:
+   - Compiles all .scm files to .go bytecode
+   - Creates a distribution directory
+   - Includes a launcher script
+
+2. Set up GitHub Actions to:
+   - Test on Linux and FreeBSD (via Cirrus CI)
+   - Build bytecode artifacts
+   - Create releases automatically
+
+3. Optional Docker image for easy deployment

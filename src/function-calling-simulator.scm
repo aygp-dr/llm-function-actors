@@ -148,7 +148,8 @@
 ;; Simulation runner
 (define (run-simulation prompt)
   "Run a complete function calling simulation"
-  (let ((channel (make-channel)))
+  (let ((channel (make-channel))
+        (timeout-seconds 10))
     
     ;; Start application actor
     (let ((app-thread
@@ -162,9 +163,19 @@
               (lambda ()
                 (llm-actor channel prompt)))))
         
-        ;; Wait for completion
-        (join-thread llm-thread)
-        (join-thread app-thread)))))
+        ;; Wait for completion with timeout
+        (let ((start-time (current-time)))
+          (while (and (not (thread-exited? llm-thread))
+                      (< (- (current-time) start-time) timeout-seconds))
+            (usleep 100000)) ; Sleep 100ms
+          
+          ;; Cancel threads if timeout
+          (when (not (thread-exited? llm-thread))
+            (format #t "~%Timeout: Simulation took longer than ~a seconds~%" timeout-seconds)
+            (cancel-thread llm-thread))
+          
+          (when (not (thread-exited? app-thread))
+            (cancel-thread app-thread)))))))
 
 ;; Queue implementation
 (define (make-queue)
