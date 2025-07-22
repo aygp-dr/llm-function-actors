@@ -74,8 +74,11 @@ lint-shell: ## Lint shell scripts and Makefile
 ##@ Build & Distribution
 
 # Directory targets (not .PHONY!)
-$(LIB_DIR) $(BUILD_BIN_DIR) $(DIST_DIR):
+$(LIB_DIR) $(BUILD_BIN_DIR):
 	@mkdir -p $@
+
+$(DIST_DIR):
+	@install -d $@
 
 # Pattern rule for compiling Scheme to bytecode
 $(LIB_DIR)/%.go: $(SRC_DIR)/%.scm | $(LIB_DIR)
@@ -90,11 +93,11 @@ $(BUILD_BIN_DIR)/%: $(BIN_DIR)/% | $(BUILD_BIN_DIR)
 build: $(COMPILED_FILES) $(SCRIPT_TARGETS) ## Build bytecode and copy scripts
 	@echo "Build complete in $(BUILD_DIR)/"
 
-.PHONY: dist
-dist: build | $(DIST_DIR) ## Create distribution package
+# Distribution target
+$(DIST_DIR)/$(DIST_NAME).tar.gz: $(COMPILED_FILES) $(SCRIPT_TARGETS) | $(DIST_DIR) ## Create distribution package
 	@echo "Creating distribution package..."
-	@tar czf $(DIST_DIR)/$(DIST_NAME).tar.gz -C $(BUILD_DIR) .
-	@echo "Distribution package created: $(DIST_DIR)/$(DIST_NAME).tar.gz"
+	@tar czf $@ -C $(BUILD_DIR) .
+	@echo "Distribution package created: $@"
 
 .PHONY: clean
 clean: ## Clean generated files
@@ -115,9 +118,20 @@ detangle: ## Update README.org from tangled files
 	@emacs --batch --eval "(require 'org)" --eval "(org-babel-detangle \"README.org\")"
 
 .PHONY: diagrams
-diagrams: ## Generate diagram images (requires mermaid-cli)
+diagrams: ## Generate diagram images
 	@echo "Generating diagrams..."
-	@scripts/generate-diagrams.sh
+	@echo "Running org-babel tangle to extract and generate images..."
+	@emacs --batch --eval "(progn \
+		(require 'org) \
+		(require 'ob-ditaa) \
+		(require 'ob-dot) \
+		(setq org-confirm-babel-evaluate nil) \
+		(setq org-ditaa-jar-path \"/usr/local/share/java/ditaa/ditaa.jar\") \
+		(find-file \"README.org\") \
+		(org-babel-execute-buffer) \
+		(save-buffer))" 2>/dev/null || echo "Note: Some diagrams may require additional setup"
+	@scripts/generate-diagrams.sh 2>/dev/null || true
+	@echo "Diagram generation complete. Check for .png files."
 
 ##@ Utilities
 
@@ -127,6 +141,12 @@ deps: ## Check dependencies
 	@$(GUILE) --version | head -1
 	@$(GUILE) -c "(use-modules (ice-9 match) (ice-9 format) (ice-9 threads) (srfi srfi-1) (srfi srfi-9))"
 	@echo "Required Guile modules available"
+	@echo ""
+	@echo "Checking optional diagram tools..."
+	@command -v dot >/dev/null 2>&1 && echo "✓ Graphviz (dot) found" || echo "⚠ Graphviz not found"
+	@command -v ditaa >/dev/null 2>&1 && echo "✓ Ditaa found" || echo "⚠ Ditaa not found" 
+	@command -v plantuml >/dev/null 2>&1 && echo "✓ PlantUML found" || echo "⚠ PlantUML not found"
+	@command -v mmdc >/dev/null 2>&1 && echo "✓ Mermaid CLI found" || echo "⚠ Mermaid CLI not found"
 
 .PHONY: help
 help: ## Show this help

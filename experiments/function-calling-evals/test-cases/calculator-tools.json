@@ -1,0 +1,184 @@
+{
+  "suite_name": "Calculator Tools Evaluation",
+  "tools": [
+    {
+      "name": "calculator",
+      "description": "Perform mathematical calculations",
+      "parameters": {
+        "expression": {
+          "type": "string",
+          "description": "Mathematical expression to evaluate",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "statistics",
+      "description": "Calculate statistical measures",
+      "parameters": {
+        "numbers": {
+          "type": "array",
+          "description": "Array of numbers to analyze",
+          "required": true
+        },
+        "operation": {
+          "type": "string",
+          "description": "Statistical operation: mean, median, mode, std, variance",
+          "required": true,
+          "enum": ["mean", "median", "mode", "std", "variance"]
+        }
+      }
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "calc-001",
+      "prompt": "1 + 2",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "calculator",
+            "parameters": {
+              "expression": "1 + 2"
+            },
+            "purpose": "Calculate simple addition"
+          }
+        ],
+        "acceptable_final_answers": [
+          "3",
+          "1 + 2 = 3",
+          "The result is 3"
+        ]
+      }
+    },
+    {
+      "id": "calc-002",
+      "prompt": "What's 15% of 200?",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "calculator",
+            "parameters": {
+              "expression": "200 * 0.15"
+            },
+            "purpose": "Calculate percentage"
+          }
+        ],
+        "acceptable_final_answers": [
+          "30",
+          "15% of 200 is 30",
+          "The result is 30"
+        ]
+      }
+    },
+    {
+      "id": "calc-003",
+      "prompt": "Calculate the standard deviation of 1, 2, 4, 8, 16, 32",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "statistics",
+            "parameters": {
+              "numbers": [1, 2, 4, 8, 16, 32],
+              "operation": "std"
+            },
+            "purpose": "Calculate standard deviation"
+          }
+        ],
+        "acceptable_final_answers": [
+          "The standard deviation is [calculated value]",
+          "Standard deviation: [value]",
+          "The std of the numbers is [result]"
+        ]
+      }
+    },
+    {
+      "id": "calc-004",
+      "prompt": "What's the square root of 144?",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "calculator",
+            "parameters": {
+              "expression": "sqrt(144)"
+            },
+            "purpose": "Calculate square root"
+          }
+        ],
+        "acceptable_final_answers": [
+          "12",
+          "The square root of 144 is 12",
+          "√144 = 12"
+        ]
+      }
+    },
+    {
+      "id": "calc-005",
+      "prompt": "Explain hermeneutics",
+      "expected": {
+        "should_call_function": false,
+        "function_calls": [],
+        "acceptable_final_answers": [
+          "Hermeneutics is the theory and methodology of interpretation...",
+          "Hermeneutics refers to the art and science of interpretation...",
+          "Hermeneutics is a branch of knowledge that deals with interpretation..."
+        ]
+      }
+    },
+    {
+      "id": "calc-006",
+      "prompt": "What is calculus?",
+      "expected": {
+        "should_call_function": false,
+        "function_calls": [],
+        "acceptable_final_answers": [
+          "Calculus is a branch of mathematics that studies continuous change...",
+          "Calculus is the mathematical study of change, including derivatives and integrals...",
+          "Calculus is a field of mathematics that deals with rates of change..."
+        ]
+      }
+    },
+    {
+      "id": "calc-007",
+      "prompt": "Find the mean, median, and standard deviation of 5, 10, 15, 20, 25",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "statistics",
+            "parameters": {
+              "numbers": [5, 10, 15, 20, 25],
+              "operation": "mean"
+            },
+            "purpose": "Calculate mean"
+          },
+          {
+            "function": "statistics",
+            "parameters": {
+              "numbers": [5, 10, 15, 20, 25],
+              "operation": "median"
+            },
+            "purpose": "Calculate median"
+          },
+          {
+            "function": "statistics",
+            "parameters": {
+              "numbers": [5, 10, 15, 20, 25],
+              "operation": "std"
+            },
+            "purpose": "Calculate standard deviation"
+          }
+        ],
+        "acceptable_final_answers": [
+          "Mean: 15, Median: 15, Standard Deviation: [calculated value]",
+          "The statistics are: mean=15, median=15, std=[value]",
+          "Results: Average: 15, Middle value: 15, Std dev: [result]"
+        ]
+      }
+    }
+  ]
+}

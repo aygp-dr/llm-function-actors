@@ -1,0 +1,349 @@
+#+TITLE: Diagramming Tools on FreeBSD for Org-mode
+#+PROPERTY: header-args :mkdirp yes :comments both
+#+DATE: 2025-07-22
+
+* System Information
+
+#+begin_src bash :results output :exports both
+uname -a
+#+end_src
+
+#+RESULTS:
+: FreeBSD nexushive 14.3-RELEASE FreeBSD 14.3-RELEASE releng/14.3-n271432-8c9ce319fef7 GENERIC amd64
+
+* Available Diagramming Tools on FreeBSD
+
+Since Mermaid CLI is challenging to install on FreeBSD, we'll use the following well-supported alternatives:
+
+- *GraphViz* (dot) - For graph diagrams
+- *PlantUML* - For UML and sequence diagrams  
+- *ditaa* - For ASCII art to bitmap diagrams
+
+* Installation
+
+#+begin_src bash :eval no
+sudo pkg install graphviz ditaa plantuml
+#+end_src
+
+* GraphViz Examples
+
+** Simple Directed Graph
+
+#+begin_src dot :file graphviz-simple.png :cmd dot :cmdline -Tpng :exports both
+digraph G {
+  rankdir=LR;
+  App -> LLM [label="Request"];
+  LLM -> App [label="Response"];
+}
+#+end_src
+
+** Actor System Architecture
+
+#+begin_src dot :file graphviz-actors.png :cmd dot :cmdline -Tpng :exports both
+digraph ActorSystem {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  
+  subgraph cluster_app {
+    label="Application Actor";
+    style=filled;
+    color=lightgrey;
+    FunctionRegistry [label="Function\nRegistry"];
+    MessageHandler [label="Message\nHandler"];
+    Executor [label="Function\nExecutor"];
+  }
+  
+  subgraph cluster_llm {
+    label="LLM Actor";
+    style=filled;
+    color=lightblue;
+    DecisionEngine [label="Decision\nEngine"];
+    ResponseGen [label="Response\nGenerator"];
+  }
+  
+  MessageQueue [shape=cylinder, label="Message Queue"];
+  
+  MessageHandler -> MessageQueue [label="send"];
+  MessageQueue -> DecisionEngine [label="receive"];
+  ResponseGen -> MessageQueue [label="send"];
+  MessageQueue -> MessageHandler [label="receive"];
+}
+#+end_src
+
+* PlantUML Examples
+
+** Sequence Diagram
+
+#+begin_src plantuml :file plantuml-sequence.png :exports both
+@startuml
+!theme plain
+
+participant "User" as U
+participant "Application\nActor" as A
+participant "LLM\nActor" as L
+participant "Function\nRegistry" as R
+
+U -> A: Send prompt
+A -> R: Get available functions
+R --> A: Function list
+A -> L: Prompt + Functions
+L -> L: Analyze intent
+alt Function needed
+  L -> A: Request function call
+  A -> R: Execute function
+  R --> A: Result
+  A -> L: Function result
+  L -> A: Final answer
+else Direct response
+  L -> A: Final answer
+end
+A -> U: Response
+@enduml
+#+end_src
+
+** Component Diagram
+
+#+begin_src plantuml :file plantuml-components.png :exports both
+@startuml
+!theme plain
+
+package "LLM Function Calling System" {
+  [Application Actor] as App
+  [LLM Actor] as LLM
+  [Function Registry] as Registry
+  [Message Queue] as Queue
+  
+  App --> Queue : sends
+  Queue --> LLM : delivers
+  LLM --> Queue : sends
+  Queue --> App : delivers
+  App --> Registry : uses
+}
+
+[User] --> App : prompts
+App --> [User] : responses
+@enduml
+#+end_src
+
+* ditaa Examples
+
+** Simple Architecture
+
+#+begin_src ditaa :file ditaa-architecture.png :exports both
++---------------+       +---------------+
+|  Application  |<----->|      LLM      |
+|     Actor     |       |     Actor     |
++-------+-------+       +-------+-------+
+        |                       |
+        v                       v
++-------+-------+       +-------+-------+
+|   Function    |       |   Decision    |
+|   Registry    |       |    Engine     |
++---------------+       +---------------+
+#+end_src
+
+** Message Flow
+
+#+begin_src ditaa :file ditaa-flow.png :exports both
+    User Input
+         |
+         v
+    +---------+
+    |  Parse  |
+    +---------+
+         |
+         v
+    +---------+
+    | Analyze |
+    +---------+
+         |
+    +----+----+
+    |         |
+    v         v
++--------+ +--------+
+|Function| | Direct |
+|  Call  | |Response|
++--------+ +--------+
+    |         |
+    +----+----+
+         |
+         v
+    +---------+
+    | Output  |
+    +---------+
+#+end_src
+
+* Org-mode Configuration
+
+Add to your Emacs configuration:
+
+#+begin_src emacs-lisp :tangle ~/.emacs.d/org-diagrams-config.el
+;; Enable babel languages for diagrams
+(org-babel-do-load-languages
+ 'org-babel-load-languages
+ '((dot . t)
+   (plantuml . t)
+   (ditaa . t)))
+
+;; Set paths for FreeBSD
+(setq org-plantuml-jar-path "/usr/local/share/java/classes/plantuml.jar")
+(setq org-ditaa-jar-path "/usr/local/share/java/classes/ditaa.jar")
+
+;; Optional: Set default image export format
+(setq org-babel-default-header-args:dot
+      '((:cmd . "dot")
+        (:cmdline . "-Tpng")
+        (:exports . "results")))
+#+end_src
+
+* Comparison of Tools
+
+| Tool     | Best For | Syntax Complexity | Output Quality | FreeBSD Support |
+|----------+----------+-------------------+----------------+-----------------|
+| GraphViz | Graphs, Trees | Medium | Excellent | Native |
+| PlantUML | UML, Sequences | Low | Very Good | Java-based |
+| ditaa    | ASCII Diagrams | Very Low | Good | Java-based |
+
+* Makefile Integration
+
+Update the project Makefile to generate diagrams:
+
+#+begin_src makefile :tangle ../../scripts/generate-diagrams.sh :shebang "#!/bin/sh"
+# Generate all diagrams from org files
+echo "Generating diagrams from org files..."
+
+# Find all org files with diagram blocks
+for org_file in $(find . -name "*.org" -type f); do
+    echo "Processing: $org_file"
+    
+    # Extract and run dot blocks
+    grep -A 1000 "^#+begin_src dot" "$org_file" | \
+    grep -B 1000 "^#+end_src" | \
+    grep -v "^#+" > /tmp/temp.dot
+    
+    if [ -s /tmp/temp.dot ]; then
+        base_name=$(basename "$org_file" .org)
+        dot -Tpng /tmp/temp.dot -o "${base_name}-graph.png"
+    fi
+done
+
+echo "Diagram generation complete"
+#+end_src
+
+* Examples for LLM Function Calling Project
+
+** Function Call Decision Tree (GraphViz)
+
+#+begin_src dot :file llm-decision-tree.png :cmd dot :cmdline -Tpng :exports both
+digraph DecisionTree {
+  rankdir=TB;
+  node [shape=diamond];
+  
+  start [label="User Prompt", shape=box];
+  analyze [label="Analyze\nIntent"];
+  toolrelevant [label="Tool\nRelevant?"];
+  selecttool [label="Select\nTool"];
+  paramsclear [label="Parameters\nClear?"];
+  callfunc [label="Call\nFunction", shape=box];
+  askclarity [label="Ask\nClarification", shape=box];
+  needmore [label="Need More\nTools?"];
+  direct [label="Direct\nResponse", shape=box];
+  final [label="Generate\nFinal Answer", shape=box];
+  
+  start -> analyze;
+  analyze -> toolrelevant;
+  toolrelevant -> selecttool [label="Yes"];
+  toolrelevant -> direct [label="No"];
+  selecttool -> paramsclear;
+  paramsclear -> callfunc [label="Yes"];
+  paramsclear -> askclarity [label="No"];
+  callfunc -> needmore;
+  needmore -> selecttool [label="Yes"];
+  needmore -> final [label="No"];
+  direct -> final;
+}
+#+end_src
+
+** Message Protocol (PlantUML)
+
+#+begin_src plantuml :file message-protocol.png :exports both
+@startuml
+!theme plain
+title LLM Function Calling Message Protocol
+
+entity "Message" as msg {
+  * type : MessageType
+  * content : Object
+  * sender : ActorID
+  --
+  timestamp : Time
+}
+
+enum MessageType {
+  PROMPT
+  FUNCTION_CALL
+  FUNCTION_RESULT
+  FINAL_ANSWER
+  ERROR
+}
+
+enum ActorID {
+  APPLICATION
+  LLM
+  USER
+}
+
+msg --> MessageType
+msg --> ActorID
+@enduml
+#+end_src
+
+* Generating Diagrams Programmatically
+
+** From Guile Scheme
+
+#+begin_src scheme :tangle generate-diagrams.scm
+#!/usr/bin/env guile
+!#
+
+(use-modules (ice-9 format)
+             (ice-9 popen)
+             (ice-9 rdelim))
+
+(define (generate-dot-diagram dot-code output-file)
+  "Generate a diagram from DOT code"
+  (let ((port (open-pipe* OPEN_WRITE "dot" "-Tpng" "-o" output-file)))
+    (display dot-code port)
+    (close-pipe port)))
+
+(define (create-actor-diagram)
+  "Create actor system diagram"
+  (let ((dot-code "
+digraph ActorSystem {
+  rankdir=LR;
+  App [label=\"Application\\nActor\"];
+  LLM [label=\"LLM\\nActor\"];
+  App -> LLM [label=\"request\"];
+  LLM -> App [label=\"response\"];
+}"))
+    (generate-dot-diagram dot-code "actor-system.png")))
+
+;; Generate diagrams
+(create-actor-diagram)
+(format #t "Diagram generated: actor-system.png~%")
+#+end_src
+
+* Testing Diagram Generation
+
+Run this to test all diagram types:
+
+#+begin_src bash :results output :exports both
+echo "Testing diagram tools..."
+which dot && echo "✓ GraphViz available" || echo "✗ GraphViz missing"
+which plantuml && echo "✓ PlantUML available" || echo "✗ PlantUML missing"
+which ditaa && echo "✓ ditaa available" || echo "✗ ditaa missing"
+#+end_src
+
+* Conclusion
+
+On FreeBSD 14.3, we have excellent diagram support through GraphViz, PlantUML, and ditaa. These tools integrate seamlessly with org-mode and provide all the diagramming capabilities needed for technical documentation without the complexity of installing Mermaid CLI.

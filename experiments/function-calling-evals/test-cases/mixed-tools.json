@@ -1,0 +1,171 @@
+{
+  "suite_name": "Mixed Tools Evaluation",
+  "tools": [
+    {
+      "name": "list_files",
+      "description": "List files in a directory",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "read_file",
+      "description": "Read contents of a file",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "calculator",
+      "description": "Perform mathematical calculations",
+      "parameters": {
+        "expression": {
+          "type": "string",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "analyze_code",
+      "description": "Analyze code for patterns, complexity, or issues",
+      "parameters": {
+        "code": {
+          "type": "string",
+          "required": true
+        },
+        "language": {
+          "type": "string",
+          "required": true
+        },
+        "analysis_type": {
+          "type": "string",
+          "required": true,
+          "enum": ["complexity", "security", "style"]
+        }
+      }
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "mixed-001",
+      "prompt": "Count the number of functions in main.py and calculate the average lines per function",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "read_file",
+            "parameters": {
+              "path": "main.py"
+            },
+            "purpose": "Read the Python file"
+          },
+          {
+            "function": "analyze_code",
+            "parameters": {
+              "code": "[file contents]",
+              "language": "python",
+              "analysis_type": "complexity"
+            },
+            "purpose": "Analyze code structure"
+          },
+          {
+            "function": "calculator",
+            "parameters": {
+              "expression": "[total_lines] / [function_count]"
+            },
+            "purpose": "Calculate average"
+          }
+        ],
+        "acceptable_final_answers": [
+          "main.py contains [N] functions with an average of [X] lines per function",
+          "Found [N] functions, average lines: [X]",
+          "Analysis: [N] functions, [X] lines average"
+        ]
+      }
+    },
+    {
+      "id": "mixed-002",
+      "prompt": "How many configuration files are there and what's 20% of that number?",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "list_files",
+            "parameters": {},
+            "purpose": "List all files"
+          },
+          {
+            "function": "calculator",
+            "parameters": {
+              "expression": "[config_count] * 0.20"
+            },
+            "purpose": "Calculate 20%"
+          }
+        ],
+        "acceptable_final_answers": [
+          "Found [N] configuration files, 20% of that is [X]",
+          "There are [N] config files. 20% = [X]",
+          "[N] configuration files found, which means 20% is [X]"
+        ]
+      }
+    },
+    {
+      "id": "mixed-003",
+      "prompt": "Analyze the security of the login function in auth.py and calculate its cyclomatic complexity",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "read_file",
+            "parameters": {
+              "path": "auth.py"
+            },
+            "purpose": "Read auth.py file"
+          },
+          {
+            "function": "analyze_code",
+            "parameters": {
+              "code": "[login function code]",
+              "language": "python",
+              "analysis_type": "security"
+            },
+            "purpose": "Security analysis"
+          },
+          {
+            "function": "analyze_code",
+            "parameters": {
+              "code": "[login function code]",
+              "language": "python",
+              "analysis_type": "complexity"
+            },
+            "purpose": "Complexity analysis"
+          }
+        ],
+        "acceptable_final_answers": [
+          "Security analysis: [findings]. Cyclomatic complexity: [value]",
+          "The login function has [security issues] and complexity of [N]",
+          "Results: Security - [status], Complexity score: [N]"
+        ]
+      }
+    },
+    {
+      "id": "mixed-004",
+      "prompt": "What is the difference between authentication and authorization?",
+      "expected": {
+        "should_call_function": false,
+        "function_calls": [],
+        "acceptable_final_answers": [
+          "Authentication verifies who you are, while authorization determines what you can do...",
+          "Authentication is the process of verifying identity, authorization is granting permissions...",
+          "Authentication confirms your identity, authorization controls your access rights..."
+        ]
+      }
+    }
+  ]
+}

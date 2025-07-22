@@ -7,6 +7,19 @@
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
 
+#+begin_src ditaa :file llm-function-arch.png :exports results
+    +---------------+       +---------------+
+    |  Application  |<----->|      LLM      |
+    |     Actor     |       |     Actor     |
+    +-------+-------+       +-------+-------+
+            |                       |
+            v                       v
+    +-------+-------+       +-------+-------+
+    |   Function    |       |   Decision    |
+    |   Registry    |       |    Engine     |
+    +---------------+       +---------------+
+#+end_src
+
 #+begin_src mermaid :file llm-function-calling-flow.png :exports results
 graph TD
     A[User Prompt] --> B{Analyze Intent}
@@ -36,6 +49,35 @@ graph TD
 #+end_src
 
 [[./docs/llm-function-calling-sequence.mmd][View detailed sequence diagram]]
+
+#+begin_src dot :file llm-function-states.png :cmd dot :cmdline -Tpng :exports results
+digraph G {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+    
+    Start [shape=circle, label=""];
+    Idle [label="Idle"];
+    Prompt [label="Prompt\nReceived"];
+    Request [label="Preparing\nRequest"];
+    Waiting [label="Waiting\nfor LLM"];
+    Processing [label="Processing\nResponse"];
+    FunctionCall [label="Function Call\nDetected"];
+    Execute [label="Executing\nFunction"];
+    Final [label="Final\nAnswer"];
+    End [shape=doublecircle, label=""];
+    
+    Start -> Idle;
+    Idle -> Prompt [label="User Input"];
+    Prompt -> Request;
+    Request -> Waiting [label="Send Request"];
+    Waiting -> Processing;
+    Processing -> FunctionCall [label="Has Tool Call"];
+    Processing -> Final [label="Direct Response"];
+    FunctionCall -> Execute;
+    Execute -> Waiting [label="Send Result"];
+    Final -> End;
+}
+#+end_src
 
 ** Overview
 
@@ -131,3 +173,4 @@ To add new capabilities:
 ** License
 
 This project is part of the aygp-dr repository.
+

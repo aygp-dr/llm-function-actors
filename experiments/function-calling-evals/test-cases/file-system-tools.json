@@ -1,0 +1,159 @@
+{
+  "suite_name": "File System Tools Evaluation",
+  "tools": [
+    {
+      "name": "list_files",
+      "description": "List files in a directory",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "description": "Directory path (optional, defaults to current directory)",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "read_file",
+      "description": "Read contents of a file",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "description": "File path to read",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "write_file",
+      "description": "Write content to a file",
+      "parameters": {
+        "path": {
+          "type": "string",
+          "description": "File path to write",
+          "required": true
+        },
+        "content": {
+          "type": "string",
+          "description": "Content to write",
+          "required": true
+        }
+      }
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "fs-001",
+      "prompt": "What are the current targets for gmake?",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "list_files",
+            "parameters": {},
+            "purpose": "Find Makefile in current directory"
+          },
+          {
+            "function": "read_file",
+            "parameters": {
+              "path": "Makefile"
+            },
+            "purpose": "Read Makefile contents to extract targets"
+          }
+        ],
+        "acceptable_final_answers": [
+          "The gmake targets are: [list of targets from Makefile]",
+          "The available make targets are: [extracted targets]",
+          "Here are the current gmake targets: [target list]"
+        ]
+      }
+    },
+    {
+      "id": "fs-002",
+      "prompt": "Show me all Python files",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "list_files",
+            "parameters": {},
+            "purpose": "List files and filter for .py extension"
+          }
+        ],
+        "acceptable_final_answers": [
+          "Here are the Python files: [list of .py files]",
+          "Found the following Python files: [file list]",
+          "Python files in the directory: [filtered list]"
+        ]
+      }
+    },
+    {
+      "id": "fs-003",
+      "prompt": "What's in config.json?",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "read_file",
+            "parameters": {
+              "path": "config.json"
+            },
+            "purpose": "Read config.json contents"
+          }
+        ],
+        "acceptable_final_answers": [
+          "The contents of config.json: [file contents]",
+          "Here's what's in config.json: [contents]",
+          "config.json contains: [parsed contents]"
+        ]
+      }
+    },
+    {
+      "id": "fs-004",
+      "prompt": "Create a README with basic project information",
+      "expected": {
+        "should_call_function": true,
+        "function_calls": [
+          {
+            "function": "write_file",
+            "parameters": {
+              "path": "README.md",
+              "content": "[Generated README content]"
+            },
+            "purpose": "Create README.md file"
+          }
+        ],
+        "acceptable_final_answers": [
+          "Created README.md with basic project information",
+          "README.md has been created successfully",
+          "I've created a README file with the project information"
+        ]
+      }
+    },
+    {
+      "id": "fs-005",
+      "prompt": "Explain what a Makefile is",
+      "expected": {
+        "should_call_function": false,
+        "function_calls": [],
+        "acceptable_final_answers": [
+          "A Makefile is a file containing a set of directives used by the make build automation tool...",
+          "A Makefile defines a set of tasks to be executed...",
+          "Makefiles are special format files that help build and manage projects..."
+        ]
+      }
+    },
+    {
+      "id": "fs-006",
+      "prompt": "How do I write a good README?",
+      "expected": {
+        "should_call_function": false,
+        "function_calls": [],
+        "acceptable_final_answers": [
+          "A good README should include: project title, description, installation instructions...",
+          "To write a good README, include: 1) Project overview 2) Installation steps...",
+          "Best practices for README files include clear structure, examples..."
+        ]
+      }
+    }
+  ]
+}

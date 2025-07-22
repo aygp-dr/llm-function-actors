@@ -1,0 +1,28 @@
+#+TITLE: Quick Test Examples for FreeBSD Diagramming Tools
+#+PROPERTY: header-args :mkdirp yes :exports both
+
+* GraphViz Test
+
+#+begin_src dot :file test-graphviz.png :cmd dot :cmdline -Tpng :exports results
+digraph {
+  App -> LLM [label="Request"];
+  LLM -> App [label="Response"];
+}
+#+end_src
+
+* PlantUML Test
+
+#+begin_src plantuml :file test-plantuml.png :exports results
+@startuml
+App -> LLM: Request
+LLM -> App: Response
+@enduml
+#+end_src
+
+* ditaa Test
+
+#+begin_src ditaa :file test-ditaa.png :exports results
++-----+       +-----+
+| App |------>| LLM |
++-----+       +-----+
+#+end_src

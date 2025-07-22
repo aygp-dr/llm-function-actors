@@ -1,0 +1,36 @@
+{
+  "name": "LLM Function Calling Evaluation Suite",
+  "version": "1.0.0",
+  "description": "Evaluation framework for testing LLM function calling behavior",
+  "evaluation_criteria": {
+    "function_selection": {
+      "weight": 0.30,
+      "description": "Correctly identifies when to use functions"
+    },
+    "parameter_extraction": {
+      "weight": 0.25,
+      "description": "Accurately extracts parameters from prompt"
+    },
+    "chain_logic": {
+      "weight": 0.20,
+      "description": "Logical sequence of function calls"
+    },
+    "no_false_positives": {
+      "weight": 0.15,
+      "description": "Avoids unnecessary function calls"
+    },
+    "error_handling": {
+      "weight": 0.10,
+      "description": "Handles missing tools or parameters gracefully"
+    }
+  },
+  "test_suites": [
+    "file-system-tools",
+    "calculator-tools",
+    "code-analysis-tools",
+    "data-processing-tools",
+    "web-api-tools",
+    "time-date-tools",
+    "mixed-tools"
+  ]
+}
