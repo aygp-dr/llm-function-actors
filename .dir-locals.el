@@ -1,0 +1,15 @@
+;;; Directory Local Variables
+;;; For more information see (info "(emacs) Directory Variables")
+
+((nil . ((eval . (when (require 'llm-function-actors nil t)
+                   (llm-function-actors-mode 1)))))
+ (scheme-mode . ((geiser-scheme-implementation . guile)
+                 (geiser-guile-binary . "guile3")
+                 (eval . (put 'match 'scheme-indent-function 1))
+                 (eval . (put 'with-mutex 'scheme-indent-function 1))
+                 (eval . (put 'register-function! 'scheme-indent-function 1))))
+ (org-mode . ((org-confirm-babel-evaluate . nil)
+              (org-src-preserve-indentation . t)
+              (org-babel-default-header-args:scheme . ((:results . "output")
+                                                        (:exports . "both")))
+              (org-babel-default-header-args:mermaid . ((:exports . "results"))))))

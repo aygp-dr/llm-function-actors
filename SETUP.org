@@ -9,12 +9,8 @@
 This pattern demonstrates the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
 
 ** System Flow
-:PROPERTIES:
-:tangle: ./docs/function-flow.org
-:mkdirp: t
-:END:
 
-#+begin_src mermaid :file function-calling-flow.png :mkdirp t
+#+begin_src mermaid :file function-calling-flow.png
 sequenceDiagram
     participant App as Application
     participant LLM as LLM Provider
@@ -31,12 +27,8 @@ sequenceDiagram
 #+end_src
 
 ** Guile Scheme Simulator
-:PROPERTIES:
-:tangle: ./src/function-calling-simulator.scm
-:mkdirp: t
-:END:
 
-#+begin_src scheme
+#+begin_src scheme :tangle ./src/function-calling-simulator.scm :mkdirp yes
 #!/usr/bin/env guile
 !#
 
@@ -201,12 +193,8 @@ sequenceDiagram
 #+end_src
 
 ** Usage Example
-:PROPERTIES:
-:tangle: ./examples/function-calling-demo.scm
-:mkdirp: t
-:END:
 
-#+begin_src scheme
+#+begin_src scheme :tangle ./examples/function-calling-demo.scm :mkdirp yes
 #!/usr/bin/env guile
 !#
 
@@ -233,10 +221,6 @@ sequenceDiagram
 #+end_src
 
 ** Pattern Analysis
-:PROPERTIES:
-:tangle: ./docs/pattern-analysis.org
-:mkdirp: t
-:END:
 
 *** Key Components
 

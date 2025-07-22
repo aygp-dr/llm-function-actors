@@ -1,8 +1,8 @@
-# LLM Function Calling Pattern - Two Actor System
+* LLM Function Calling Pattern - Two Actor System
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
 
-## Overview
+** Overview
 
 This project implements a two-actor pattern for LLM function calling, providing:
 - Clear separation between application logic and LLM reasoning
@@ -10,62 +10,62 @@ This project implements a two-actor pattern for LLM function calling, providing:
 - Extensible function registry
 - Thread-safe communication channels
 
-## Architecture
+** Architecture
 
 The system consists of two main actors:
 
-1. **Application Actor**: Manages function definitions, executes requested functions, and handles results
-2. **LLM Actor**: Processes prompts, decides whether to call functions or respond directly, and generates final answers
+1. *Application Actor*: Manages function definitions, executes requested functions, and handles results
+2. *LLM Actor*: Processes prompts, decides whether to call functions or respond directly, and generates final answers
 
 Communication happens through message queues with defined message types for each phase of interaction.
 
-## Requirements
+** Requirements
 
 - GNU Guile 3.0 or later
 - SRFI modules (srfi-1, srfi-9)
-- ice-9 modules (match, format)
+- ice-9 modules (match, format, threads)
 
-## Installation
+** Installation
 
-```bash
-git clone <repository>
+#+begin_src bash
+git clone https://github.com/aygp-dr/llm-function-actors
 cd llm-function-actors
-```
+#+end_src
 
-## Usage
+** Usage
 
-### Run the simulator
-```bash
-make run
-```
+*** Run the simulator
+#+begin_src bash
+gmake run
+#+end_src
 
-### Run demo examples
-```bash
-make demo
+*** Run demo examples
+#+begin_src bash
+gmake demo
 # or directly:
 ./examples/function-calling-demo.scm
-```
+#+end_src
 
-### Available Functions
+*** Available Functions
 
 The simulator comes with two built-in functions:
-- `calculate`: Adds two numbers
-- `get-time`: Returns current timestamp
+- ~calculate~: Adds two numbers
+- ~get-time~: Returns current timestamp
 
 Additional functions can be registered:
-```scheme
+#+begin_src scheme
 (register-function! 'my-function
                     (lambda (arg1 arg2)
                       ;; function implementation
                       result))
-```
+#+end_src
 
-## Project Structure
+** Project Structure
 
-```
+#+begin_example
 .
 ├── SETUP.org           # Original design document
-├── README.md           # This file
+├── README.org          # This file
 ├── Makefile            # Build automation
 ├── src/
 │   └── function-calling-simulator.scm  # Main simulator
@@ -74,9 +74,9 @@ Additional functions can be registered:
 └── docs/
     ├── function-flow.org               # Sequence diagrams
     └── pattern-analysis.org            # Architecture analysis
-```
+#+end_example
 
-## Message Flow
+** Message Flow
 
 1. Application sends initial prompt with function definitions
 2. LLM analyzes prompt and decides action
@@ -84,15 +84,15 @@ Additional functions can be registered:
 4. Application executes function and returns result
 5. LLM incorporates result and generates final answer
 
-## Extending the System
+** Extending the System
 
 To add new capabilities:
 
-1. Register new functions using `register-function!`
+1. Register new functions using ~register-function!~
 2. Extend message types for new interaction patterns
 3. Add error handling for production use
 4. Implement timeout mechanisms for long-running functions
 
-## License
+** License
 
 This project is part of the aygp-dr repository.
