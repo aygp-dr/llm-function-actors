@@ -1,37 +1,25 @@
-sequenceDiagram
-    participant User
-    participant App as Application Actor
-    participant LLM as LLM Actor
-    participant Registry as Function Registry
+graph TD
+    A[User Prompt] --> B{Analyze Intent}
+    B --> C{Tool Relevant?}
     
-    Note over User,Registry: Setup Phase
-    App->>Registry: Register Functions
-    Registry-->>App: Functions Available
+    C -->|Yes| D[Select Tool]
+    C -->|No| E[Direct Response]
     
-    Note over User,Registry: Interaction Phase
-    User->>App: Send Prompt
-    App->>App: Add Function Definitions
-    App->>LLM: Prompt + Available Functions
+    D --> F{Parameters Clear?}
+    F -->|Yes| G[Call Function]
+    F -->|No| H[Ask Clarification]
     
-    Note over LLM: Decision Point
-    alt Needs Function
-        LLM->>App: Request Function Call<br/>(name + arguments)
-        App->>Registry: Lookup Function
-        Registry-->>App: Function Reference
-        App->>App: Execute Function
-        App->>LLM: Return Result
-        LLM->>LLM: Process Result
-        LLM->>App: Final Answer
-    else Direct Answer
-        LLM->>App: Final Answer
-    end
+    G --> I{Need More Tools?}
+    I -->|Yes| D
+    I -->|No| J[Generate Response]
     
-    App->>User: Response
+    H --> K[User Clarifies]
+    K --> F
     
-    Note over User,Registry: Optional: Multiple Function Calls
-    opt Additional Tools Needed
-        LLM->>App: Request Another Function
-        App->>App: Execute
-        App->>LLM: Result
-        Note right of LLM: Loop until complete
-    end
+    E --> L[Return Answer]
+    J --> L
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style L fill:#9f9,stroke:#333,stroke-width:2px
+    style C fill:#ff9,stroke:#333,stroke-width:2px
+    style I fill:#ff9,stroke:#333,stroke-width:2px

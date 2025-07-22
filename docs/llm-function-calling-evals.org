@@ -1,0 +1,358 @@
+#+TITLE: LLM Function Calling Evaluation Framework
+#+PROPERTY: header-args :mkdirp yes :comments both
+
+* Evaluation Test Cases for LLM Function Calling
+
+This document defines evaluation scenarios for testing LLM function calling behavior with different tool sets.
+
+** Evaluation Structure
+
+Each test case includes:
+- Tool Set: Available functions
+- Prompt: User input
+- Expected Behavior: Should call functions or not
+- Expected Calls: Sequence of function calls if applicable
+
+** File System Tools
+
+*** Tool Set
+#+begin_src json
+[
+  {
+    "name": "list_files",
+    "description": "List files in a directory",
+    "parameters": {
+      "path": "string (optional, defaults to current directory)"
+    }
+  },
+  {
+    "name": "read_file",
+    "description": "Read contents of a file",
+    "parameters": {
+      "path": "string (required)"
+    }
+  },
+  {
+    "name": "write_file",
+    "description": "Write content to a file",
+    "parameters": {
+      "path": "string (required)",
+      "content": "string (required)"
+    }
+  }
+]
+#+end_src
+
+*** Test Cases
+
+| Prompt | Should Call? | Expected Calls | Reasoning |
+|--------+--------------+----------------+-----------|
+| "What are the current targets for gmake?" | Yes | 1. list_files()<br>2. read_file("Makefile") | Need to find and read Makefile |
+| "Show me all Python files" | Yes | list_files() | Direct file listing request |
+| "What's in config.json?" | Yes | read_file("config.json") | Direct file read request |
+| "Create a README with project info" | Yes | write_file("README.md", content) | File creation request |
+| "Explain what a Makefile is" | No | None | General knowledge question |
+| "How do I write a good README?" | No | None | General advice question |
+
+** Calculator Tools
+
+*** Tool Set
+#+begin_src json
+[
+  {
+    "name": "calculator",
+    "description": "Perform mathematical calculations",
+    "parameters": {
+      "expression": "string (mathematical expression to evaluate)"
+    }
+  },
+  {
+    "name": "statistics",
+    "description": "Calculate statistical measures",
+    "parameters": {
+      "numbers": "array of numbers",
+      "operation": "string (mean, median, mode, std, variance)"
+    }
+  }
+]
+#+end_src
+
+*** Test Cases
+
+| Prompt | Should Call? | Expected Calls | Reasoning |
+|--------+--------------+----------------+-----------|
+| "1 + 2" | Yes | calculator("1 + 2") | Direct calculation request |
+| "What's 15% of 200?" | Yes | calculator("200 * 0.15") | Percentage calculation |
+| "Calculate the standard deviation of 1, 2, 4, 8, 16, 32" | Yes | statistics([1,2,4,8,16,32], "std") | Statistical calculation |
+| "What's the square root of 144?" | Yes | calculator("sqrt(144)") | Mathematical operation |
+| "Explain hermeneutics" | No | None | Not a calculation |
+| "What is calculus?" | No | None | Conceptual question |
+
+** Code Analysis Tools
+
+*** Tool Set
+#+begin_src json
+[
+  {
+    "name": "analyze_code",
+    "description": "Analyze code for patterns, complexity, or issues",
+    "parameters": {
+      "code": "string",
+      "language": "string",
+      "analysis_type": "string (complexity, security, style)"
+    }
+  },
+  {
+    "name": "find_pattern",
+    "description": "Search for code patterns",
+    "parameters": {
+      "pattern": "string (regex)",
+      "file_types": "array of strings"
+    }
+  }
+]
+#+end_src
+
+*** Test Cases
+
+| Prompt | Should Call? | Expected Calls | Reasoning |
+|--------+--------------+----------------+-----------|
+| "Find all TODO comments in the code" | Yes | find_pattern("TODO\\|FIXME\\|HACK", ["*"]) | Pattern search request |
+| "Check this function for security issues: [code]" | Yes | analyze_code(code, "python", "security") | Code analysis request |
+| "What's the cyclomatic complexity of main.py?" | Yes | 1. read_file("main.py")<br>2. analyze_code(content, "python", "complexity") | Needs file read first |
+| "Explain SOLID principles" | No | None | Conceptual question |
+| "What makes code readable?" | No | None | General advice |
+
+** Data Processing Tools
+
+*** Tool Set
+#+begin_src json
+[
+  {
+    "name": "parse_csv",
+    "description": "Parse CSV data",
+    "parameters": {
+      "data": "string",
+      "delimiter": "string (optional, default comma)"
+    }
+  },
+  {
+    "name": "query_data",
+    "description": "Query structured data with SQL-like syntax",
+    "parameters": {
+      "data": "object",
+      "query": "string"
+    }
+  },
+  {
+    "name": "transform_data",
+    "description": "Transform data format",
+    "parameters": {
+      "data": "object",
+      "from_format": "string",
+      "to_format": "string"
+    }
+  }
+]
+#+end_src
+
+*** Test Cases
+
+| Prompt | Should Call? | Expected Calls | Reasoning |
+|--------+--------------+----------------+-----------|
+| "Parse this CSV data: [data]" | Yes | parse_csv(data) | Direct parse request |
+| "Convert this JSON to YAML" | Yes | transform_data(data, "json", "yaml") | Format conversion |
+| "Find all records where age > 30" | Yes | query_data(data, "SELECT * WHERE age > 30") | Data query |
+| "What is CSV?" | No | None | Definition question |
+| "Best practices for data modeling" | No | None | General advice |
+
+** Web/API Tools
+
+*** Tool Set
+#+begin_src json
+[
+  {
+    "name": "http_request",
+    "description": "Make HTTP requests",
+    "parameters": {
+      "url": "string",
+      "method": "string (GET, POST, etc.)",
+      "headers": "object (optional)",
+      "body": "string (optional)"
+    }
+  },
+  {
+    "name": "parse_html",
+    "description": "Extract data from HTML",
+    "parameters": {
+      "html": "string",
+      "selector": "string (CSS selector)"
+    }
+  }
+]
+#+end_src
+
+*** Test Cases
+
+| Prompt | Should Call? | Expected Calls | Reasoning |
+|--------+--------------+----------------+-----------|
+| "Get the current weather from api.weather.com" | Yes | http_request("https://api.weather.com", "GET") | API request |
+| "Extract all links from this HTML" | Yes | parse_html(html, "a[href]") | HTML parsing |
+| "Check if example.com is online" | Yes | http_request("https://example.com", "HEAD") | Availability check |
+| "What is REST API?" | No | None | Conceptual question |
+| "How does HTTP work?" | No | None | Explanatory question |
+
+** Time/Date Tools
+
+*** Tool Set
+#+begin_src json
+[
+  {
+    "name": "get_current_time",
+    "description": "Get current date and time",
+    "parameters": {
+      "timezone": "string (optional)",
+      "format": "string (optional)"
+    }
+  },
+  {
+    "name": "date_calculation",
+    "description": "Perform date calculations",
+    "parameters": {
+      "date": "string",
+      "operation": "string (add, subtract, diff)",
+      "value": "string",
+      "unit": "string (days, hours, etc.)"
+    }
+  }
+]
+#+end_src
+
+*** Test Cases
+
+| Prompt | Should Call? | Expected Calls | Reasoning |
+|--------+--------------+----------------+-----------|
+| "What time is it?" | Yes | get_current_time() | Current time request |
+| "What's the date 30 days from now?" | Yes | date_calculation("now", "add", "30", "days") | Date calculation |
+| "How many days until Christmas?" | Yes | date_calculation("now", "diff", "2025-12-25", "days") | Date difference |
+| "What is UTC?" | No | None | Definition question |
+| "History of the Gregorian calendar" | No | None | Historical question |
+
+** Evaluation Mermaid Diagram
+
+#+begin_src mermaid :file llm-function-calling-flow.mmd :exports code
+graph TD
+    A[User Prompt] --> B{Analyze Intent}
+    B --> C{Tool Relevant?}
+    
+    C -->|Yes| D[Select Tool]
+    C -->|No| E[Direct Response]
+    
+    D --> F{Parameters Clear?}
+    F -->|Yes| G[Call Function]
+    F -->|No| H[Ask Clarification]
+    
+    G --> I{Need More Tools?}
+    I -->|Yes| D
+    I -->|No| J[Generate Response]
+    
+    H --> K[User Clarifies]
+    K --> F
+    
+    E --> L[Return Answer]
+    J --> L
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style L fill:#9f9,stroke:#333,stroke-width:2px
+    style C fill:#ff9,stroke:#333,stroke-width:2px
+    style I fill:#ff9,stroke:#333,stroke-width:2px
+#+end_src
+
+** Chaining Patterns
+
+*** Common Chaining Scenarios
+
+1. **File Analysis Chain**
+   - Prompt: "Analyze the complexity of all Python files"
+   - Chain: list_files() → filter(.py) → read_file(each) → analyze_code(each)
+
+2. **Data Processing Chain**
+   - Prompt: "Get weather data and calculate weekly average"
+   - Chain: http_request(weather_api) → parse_json() → statistics(temps, "mean")
+
+3. **Code Search Chain**
+   - Prompt: "Find and fix all deprecated functions"
+   - Chain: find_pattern(deprecated) → read_file(each) → analyze_code() → write_file(fixed)
+
+** Evaluation Metrics
+
+*** Success Criteria
+
+1. **Precision**: Did it call functions when needed?
+2. **Recall**: Did it avoid calling functions unnecessarily?
+3. **Parameter Accuracy**: Were the right parameters provided?
+4. **Chain Coherence**: Was the sequence logical?
+5. **Error Handling**: Did it handle missing tools gracefully?
+
+*** Scoring Rubric
+
+| Metric | Weight | Description |
+|--------+--------+-------------|
+| Function Selection | 30% | Chose appropriate function |
+| Parameter Mapping | 25% | Correct parameter extraction |
+| Chain Logic | 20% | Logical sequence of calls |
+| No False Positives | 15% | Avoided unnecessary calls |
+| Error Recovery | 10% | Handled errors gracefully |
+
+** Implementation Notes
+
+*** Guile Scheme Test Runner
+
+#+begin_src scheme :tangle ../src/function-call-evaluator.scm
+(define-module (function-call-evaluator)
+  #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1)
+  #:export (evaluate-prompt
+            register-test-case
+            run-evaluation-suite))
+
+(define test-cases '())
+
+(define (register-test-case tools prompt expected-behavior expected-calls)
+  (set! test-cases 
+        (cons (list tools prompt expected-behavior expected-calls)
+              test-cases)))
+
+(define (evaluate-prompt tools prompt)
+  ;; Simplified evaluation logic
+  (cond
+    ;; File system patterns
+    ((and (member "list_files" (map car tools))
+          (string-match "targets.*gmake\\|makefile" prompt))
+     '(("list_files" ()) ("read_file" ("Makefile"))))
+    
+    ;; Calculator patterns
+    ((and (member "calculator" (map car tools))
+          (string-match "[0-9]+.*[+\\-*/].*[0-9]+" prompt))
+     `(("calculator" (,prompt))))
+    
+    ;; No tool needed
+    ((string-match "explain\\|what is\\|how does" prompt)
+     '())
+    
+    ;; Default
+    (else '())))
+#+end_src
+
+*** Usage Example
+
+#+begin_src scheme
+(register-test-case 
+  '(("list_files" . list-files-fn)
+    ("read_file" . read-file-fn))
+  "What are the current targets for gmake?"
+  #t  ; should call
+  '(("list_files" ()) ("read_file" ("Makefile"))))
+
+(run-evaluation-suite)
+#+end_src

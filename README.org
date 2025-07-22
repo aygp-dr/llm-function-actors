@@ -7,7 +7,7 @@
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
 
-[[./docs/architecture-diagram.md][View Architecture Diagram]] (GitHub will render the mermaid diagram)
+[[./docs/llm-function-calling-flow.mmd]]
 
 ** Overview
 

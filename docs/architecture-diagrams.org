@@ -1,8 +1,8 @@
-# LLM Function Calling Architecture
+* LLM Function Calling Architecture Diagrams
 
-This diagram shows the interaction flow between actors in the LLM function calling pattern.
+** Main Sequence Diagram
 
-```mermaid
+#+begin_src mermaid :file llm-function-calling-flow.png :exports results
 sequenceDiagram
     participant User
     participant App as Application Actor
@@ -40,20 +40,20 @@ sequenceDiagram
         App->>LLM: Result
         Note right of LLM: Loop until complete
     end
-```
+#+end_src
 
-## Key Components
+** Key Components
 
-- **User**: Initiates requests with prompts
-- **Application Actor**: Manages function registry and execution
-- **LLM Actor**: Decides whether to call functions or respond directly
-- **Function Registry**: Stores available functions and their implementations
+- *User*: Initiates requests with prompts
+- *Application Actor*: Manages function registry and execution
+- *LLM Actor*: Decides whether to call functions or respond directly
+- *Function Registry*: Stores available functions and their implementations
 
-## Flow Description
+** Flow Description
 
-1. **Setup Phase**: Application registers available functions
-2. **Request Phase**: User sends prompt, app adds function definitions
-3. **Decision Phase**: LLM analyzes request and available functions
-4. **Execution Phase**: If needed, LLM requests function execution
-5. **Response Phase**: Final answer is sent back to user
-6. **Loop**: Multiple function calls possible in single interaction
+1. *Setup Phase*: Application registers available functions
+2. *Request Phase*: User sends prompt, app adds function definitions
+3. *Decision Phase*: LLM analyzes request and available functions
+4. *Execution Phase*: If needed, LLM requests function execution
+5. *Response Phase*: Final answer is sent back to user
+6. *Loop*: Multiple function calls possible in single interaction
