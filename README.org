@@ -7,7 +7,7 @@
 
 A Guile Scheme implementation demonstrating the interaction between an Application (Actor 1) and an LLM Provider (Actor 2) for function calling capabilities.
 
-[[./docs/llm-function-calling-flow.mmd]]
+[[./docs/llm-function-calling-flow.mmd][Decision Flow]] | [[./docs/llm-function-calling-sequence.mmd][Sequence Diagram]]
 
 ** Overview
 

@@ -1,8 +1,38 @@
 * LLM Function Calling Architecture Diagrams
 
-** Main Sequence Diagram
+** Decision Flow Diagram
 
-#+begin_src mermaid :file llm-function-calling-flow.png :exports results
+#+begin_src mermaid :file llm-function-calling-flow.png :exports results :tangle llm-function-calling-flow.mmd :comments no
+graph TD
+    A[User Prompt] --> B{Analyze Intent}
+    B --> C{Tool Relevant?}
+    
+    C -->|Yes| D[Select Tool]
+    C -->|No| E[Direct Response]
+    
+    D --> F{Parameters Clear?}
+    F -->|Yes| G[Call Function]
+    F -->|No| H[Ask Clarification]
+    
+    G --> I{Need More Tools?}
+    I -->|Yes| D
+    I -->|No| J[Generate Response]
+    
+    H --> K[User Clarifies]
+    K --> F
+    
+    E --> L[Return Answer]
+    J --> L
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style L fill:#9f9,stroke:#333,stroke-width:2px
+    style C fill:#ff9,stroke:#333,stroke-width:2px
+    style I fill:#ff9,stroke:#333,stroke-width:2px
+#+end_src
+
+** Sequence Diagram
+
+#+begin_src mermaid :file llm-function-calling-sequence.png :exports results :tangle llm-function-calling-sequence.mmd :comments no
 sequenceDiagram
     participant User
     participant App as Application Actor
