@@ -1,0 +1,66 @@
+*** Key Components
+
+#+begin_src mermaid :file actor-components.png :mkdirp t
+graph TB
+    subgraph "Application Actor"
+        A1[Function Registry]
+        A2[Message Handler]
+        A3[Function Executor]
+        A1 --> A3
+        A2 --> A3
+    end
+    
+    subgraph "LLM Actor"
+        L1[Context Manager]
+        L2[Decision Engine]
+        L3[Response Generator]
+        L1 --> L2
+        L2 --> L3
+    end
+    
+    subgraph "Communication Layer"
+        C1[Message Queue]
+        C2[Channel Abstraction]
+        C1 --> C2
+    end
+    
+    A3 -.-> C2
+    L3 -.-> C2
+    C2 -.-> A2
+    C2 -.-> L2
+#+end_src
+
+*** Message Flow States
+
+1. **Initial State**: Application idle, LLM waiting
+2. **Prompt Phase**: Application sends prompt + function definitions
+3. **Decision Phase**: LLM analyzes and decides action
+4. **Function Call Phase**: LLM requests function execution
+5. **Execution Phase**: Application runs function locally
+6. **Result Phase**: Application returns function output
+7. **Completion Phase**: LLM generates final answer
+
+*** Benefits of Two-Actor Pattern
+
+- **Separation of Concerns**: Clear boundaries between application logic and LLM reasoning
+- **Asynchronous Operation**: Non-blocking message passing
+- **Extensibility**: Easy to add new functions to registry
+- **Testability**: Each actor can be tested independently
+- **Provider Agnostic**: Works with any LLM that supports function calling
+
+** Implementation Notes
+
+*** Thread Safety
+The queue implementation provides basic thread safety through Guile's built-in primitives. For production use, consider using Guile's thread-safe data structures.
+
+*** Error Handling
+The simulator includes basic error handling for unknown functions. Extend this for production use with:
+- Timeout mechanisms
+- Retry logic
+- Error propagation
+- Graceful degradation
+
+*** Performance Considerations
+- Message passing overhead is minimal for typical LLM latencies
+- Function registry lookup is O(n); consider hash tables for large registries
+- Queue operations are amortized O(1)

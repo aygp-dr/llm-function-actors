@@ -1,0 +1,15 @@
+#+begin_src mermaid :file function-calling-flow.png :mkdirp t
+sequenceDiagram
+    participant App as Application
+    participant LLM as LLM Provider
+    
+    App->>LLM: Initial Request (Prompt + Function Definitions)
+    LLM->>LLM: Decide Response Strategy
+    LLM->>App: Completion (Function Name + Arguments)
+    App->>App: Parse Response & Execute Function
+    App->>LLM: Function Result + Continuation Prompt
+    LLM->>LLM: Decide Next Action
+    LLM->>App: Final Answer
+    
+    Note over App,LLM: Loop possible for multiple function calls
+#+end_src
