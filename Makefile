@@ -1,117 +1,133 @@
-.PHONY: all run demo demo-file-tools test lint lint-scheme lint-org lint-shell clean build dist tangle detangle deps help
+# LLM Function Actors - GNU Makefile
+# Version and naming
+VERSION := 0.1.0
+DIST_NAME := llm-function-actors-$(VERSION)
 
-# Use gmake if available
+# Tools
 MAKE := gmake
+GUILE := guile3
+GUILD := guild
+
+# Directories
+BUILD_DIR := build
+DIST_DIR := dist
+SRC_DIR := src
+BIN_DIR := bin
+LIB_DIR := $(BUILD_DIR)/lib
+BUILD_BIN_DIR := $(BUILD_DIR)/bin
+
+# Files
+SCHEME_SOURCES := $(wildcard $(SRC_DIR)/*.scm)
+COMPILED_FILES := $(patsubst $(SRC_DIR)/%.scm,$(LIB_DIR)/%.go,$(SCHEME_SOURCES))
+SCRIPT_SOURCES := $(wildcard $(BIN_DIR)/*)
+SCRIPT_TARGETS := $(patsubst $(BIN_DIR)/%,$(BUILD_BIN_DIR)/%,$(SCRIPT_SOURCES))
 
 # Default target
-all: help
+.DEFAULT_GOAL := help
 
-# Run the main simulator
-run:
+##@ Development
+
+.PHONY: run
+run: ## Run the main function calling simulator
 	@echo "Running function calling simulator..."
-	@cd src && guile function-calling-simulator.scm
+	@$(GUILE) $(SRC_DIR)/function-calling-simulator.scm
 
-# Run the demo examples
-demo:
+.PHONY: demo
+demo: ## Run the function calling demo
 	@echo "Running function calling demo..."
-	@guile examples/function-calling-demo.scm
+	@$(GUILE) examples/function-calling-demo.scm
 
-# Run file tools demo
-demo-file-tools:
+.PHONY: demo-file-tools
+demo-file-tools: ## Run the file tools demo
 	@echo "Running file tools demo..."
-	@guile examples/file-tools-demo.scm
+	@$(GUILE) examples/file-tools-demo.scm
 
-# Run tests (placeholder for now)
-test:
+##@ Testing & Quality
+
+.PHONY: test
+test: ## Run tests (TODO)
 	@echo "Running tests..."
 	@echo "TODO: Add test suite"
 
-# Lint all file types
-lint: lint-scheme lint-org lint-shell
+.PHONY: lint
+lint: lint-scheme lint-org lint-shell ## Lint all files
 	@echo ""
 	@echo "=== All linting complete ==="
 
-# Lint Scheme files
-lint-scheme:
+.PHONY: lint-scheme
+lint-scheme: ## Lint Scheme files
 	@echo "=== Linting Scheme files ==="
-	@find . -name "*.scm" -type f -exec guile -c "(primitive-load \"{}\")" \;
+	@find . -name "*.scm" -type f -exec $(GUILE) -c "(primitive-load \"{}\")" \;
 
-# Lint Org files
-lint-org:
+.PHONY: lint-org
+lint-org: ## Lint Org files
 	@echo "=== Linting Org files ==="
 	@find . -name "*.org" -type f -exec emacs --batch --eval "(progn (require 'org) (find-file \"{}\") (org-lint) (kill-emacs))" \;
 
-# Lint Shell scripts and Makefile
-lint-shell:
+.PHONY: lint-shell
+lint-shell: ## Lint shell scripts and Makefile
 	@echo "=== Linting Shell scripts ==="
 	@find . -name "*.sh" -o -name "*.bash" | xargs -r shellcheck
 	@echo "=== Checking Makefile ==="
-	@gmake -n -f Makefile
+	@$(MAKE) -n -f Makefile
 
-# Clean generated files
-clean:
-	@echo "Cleaning generated files..."
-	@find . -name "*.go" -o -name "*.png" -o -name "*~" | xargs rm -f
-	@rm -rf build/ dist/
+##@ Build & Distribution
 
-# Build bytecode
-build:
-	@echo "Building Guile bytecode..."
-	@mkdir -p build/lib
-	@echo "Compiling Scheme files..."
-	@guild compile -o build/lib/function-calling-simulator.go src/function-calling-simulator.scm
-	@guild compile -o build/lib/file-tools-simulator.go src/file-tools-simulator.scm
-	@echo "Copying scripts..."
-	@cp -r bin build/
-	@echo "Build complete in build/"
+# Directory targets (not .PHONY!)
+$(LIB_DIR) $(BUILD_BIN_DIR) $(DIST_DIR):
+	@mkdir -p $@
 
-# Create distribution package
-dist: build
+# Pattern rule for compiling Scheme to bytecode
+$(LIB_DIR)/%.go: $(SRC_DIR)/%.scm | $(LIB_DIR)
+	@echo "Compiling $<..."
+	@$(GUILD) compile -o $@ $<
+
+# Pattern rule for copying scripts
+$(BUILD_BIN_DIR)/%: $(BIN_DIR)/% | $(BUILD_BIN_DIR)
+	@cp $< $@
+
+.PHONY: build
+build: $(COMPILED_FILES) $(SCRIPT_TARGETS) ## Build bytecode and copy scripts
+	@echo "Build complete in $(BUILD_DIR)/"
+
+.PHONY: dist
+dist: build | $(DIST_DIR) ## Create distribution package
 	@echo "Creating distribution package..."
-	@mkdir -p dist
-	@tar czf dist/llm-function-actors-$$(date +%Y%m%d).tar.gz -C build .
-	@echo "Distribution package created in dist/"
+	@tar czf $(DIST_DIR)/$(DIST_NAME).tar.gz -C $(BUILD_DIR) .
+	@echo "Distribution package created: $(DIST_DIR)/$(DIST_NAME).tar.gz"
 
-# Tangle README.org
-tangle:
+.PHONY: clean
+clean: ## Clean generated files
+	@echo "Cleaning generated files..."
+	@rm -rf $(BUILD_DIR) $(DIST_DIR)
+	@find . -name "*.go" -o -name "*.png" -o -name "*~" | xargs rm -f
+
+##@ Documentation
+
+.PHONY: tangle
+tangle: ## Tangle code from README.org
 	@echo "Tangling README.org..."
 	@emacs --batch --eval "(require 'org)" --eval "(org-babel-tangle-file \"README.org\")"
 
-# Detangle README.org
-detangle:
+.PHONY: detangle  
+detangle: ## Update README.org from tangled files
 	@echo "Detangling README.org..."
 	@emacs --batch --eval "(require 'org)" --eval "(org-babel-detangle \"README.org\")"
 
-# Check dependencies
-deps:
+##@ Utilities
+
+.PHONY: deps
+deps: ## Check dependencies
 	@echo "Checking dependencies..."
-	@guile3 --version | head -1
-	@guile3 -c "(use-modules (ice-9 match) (ice-9 format) (ice-9 threads) (srfi srfi-1) (srfi srfi-9))"
+	@$(GUILE) --version | head -1
+	@$(GUILE) -c "(use-modules (ice-9 match) (ice-9 format) (ice-9 threads) (srfi srfi-1) (srfi srfi-9))"
 	@echo "Required Guile modules available"
 
-# Show help
-help:
-	@echo "LLM Function Calling Pattern - Makefile targets:"
-	@echo ""
-	@echo "  gmake run           - Run the main function calling simulator"
-	@echo "  gmake demo          - Run the function calling demo"
-	@echo "  gmake demo-file-tools - Run the file tools demo"
-	@echo "  gmake test          - Run tests (TODO)"
-	@echo "  gmake lint          - Lint all files (Scheme, Org, Shell)"
-	@echo "  gmake lint-scheme   - Lint only Scheme files"
-	@echo "  gmake lint-org      - Lint only Org files"
-	@echo "  gmake lint-shell    - Lint only Shell scripts and Makefile"
-	@echo "  gmake build         - Build bytecode files"
-	@echo "  gmake dist          - Create distribution package"
-	@echo "  gmake clean         - Clean generated files"
-	@echo "  gmake tangle        - Tangle code from README.org"
-	@echo "  gmake detangle      - Update README.org from tangled files"
-	@echo "  gmake deps          - Check dependencies"
-	@echo "  gmake help          - Show this help message"
-	@echo ""
-	@echo "Prerequisites:"
-	@echo "  - GNU Guile 3.0+ installed"
-	@echo "  - ice-9 and srfi modules available"
-	@echo "  - Emacs (optional, for tangling and Org linting)"
-	@echo "  - shellcheck (optional, for shell script linting)"
-	@echo "  - Mermaid CLI (optional, for diagrams)"
+.PHONY: help
+help: ## Show this help
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+# Special targets
+.SUFFIXES:              # Delete default suffixes
+.DELETE_ON_ERROR:       # Delete target file on error
+.SECONDARY:             # Don't delete intermediate files

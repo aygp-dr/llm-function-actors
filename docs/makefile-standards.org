@@ -1,0 +1,142 @@
+* RFC: Makefile Best Practices for LLM Function Actors
+
+This RFC proposes standards for our Makefiles based on GNU Make best practices.
+
+** Problem Statement
+
+Current Makefile has several issues:
+- Mixed use of =.PHONY= for both commands and directory-producing targets
+- No version management for releases
+- Scattered =mkdir -p= instead of proper directory dependencies
+- Inconsistent target naming conventions
+
+** Proposed Standards
+
+*** 1. Version Management
+#+begin_src makefile
+# Good: Single source of truth
+VERSION := 0.1.0
+DIST_NAME := llm-function-actors-$(VERSION)
+
+# Bad: Hardcoded in dist target
+tar czf dist/llm-function-actors-$(date +%Y%m%d).tar.gz
+#+end_src
+
+*** 2. Directory Dependencies
+#+begin_src makefile
+# Good: Order-only prerequisites
+build/lib/%.go: src/%.scm | build/lib
+	guild compile -o $@ $<
+
+build/lib build/bin dist:
+	mkdir -p $@
+
+# Bad: Scattered mkdir -p
+build:
+	@mkdir -p build/lib
+	commands...
+#+end_src
+
+*** 3. File vs Command Targets
+#+begin_src makefile
+# File targets (NOT .PHONY)
+build/lib/function-calling-simulator.go: src/function-calling-simulator.scm
+	guild compile -o $@ $<
+
+# Command aliases (.PHONY)
+.PHONY: build test clean
+build: $(COMPILED_FILES)  ## Build all files
+
+# Pattern rules for similar targets
+build/lib/%.go: src/%.scm | build/lib
+	@echo "Compiling $<..."
+	@guild compile -o $@ $<
+#+end_src
+
+*** 4. Automatic Variables
+#+begin_src makefile
+# Good: Use automatic variables
+%.go: %.scm
+	guild compile -o $@ $<
+
+# Bad: Repeated paths
+build/lib/simulator.go: src/simulator.scm
+	guild compile -o build/lib/simulator.go src/simulator.scm
+#+end_src
+
+*** 5. Target Organization
+#+begin_src makefile
+# Group related targets
+.PHONY: all test clean
+
+# Development targets
+.PHONY: run demo demo-file-tools
+
+# Quality targets  
+.PHONY: lint lint-scheme lint-org lint-shell
+
+# Build targets
+.PHONY: build dist
+
+# Utility targets
+.PHONY: deps help
+#+end_src
+
+** Benefits
+
+1. *Proper rebuilds* when source files change
+2. *Clear semantics* between file targets and commands
+3. *DRY principle* with pattern rules
+4. *Maintainable* as project grows
+5. *Standard GNU Make* patterns
+
+** Implementation for Our Project
+
+*** Before (Current):
+#+begin_src makefile
+build:
+	@echo "Building Guile bytecode..."
+	@mkdir -p build/lib
+	@guild compile -o build/lib/function-calling-simulator.go src/function-calling-simulator.scm
+	@guild compile -o build/lib/file-tools-simulator.go src/file-tools-simulator.scm
+#+end_src
+
+*** After (Proposed):
+#+begin_src makefile
+# Version
+VERSION := 0.1.0
+
+# Files
+SCHEME_SOURCES := $(wildcard src/*.scm)
+COMPILED_FILES := $(patsubst src/%.scm,build/lib/%.go,$(SCHEME_SOURCES))
+
+# Directories
+build/lib build/bin dist:
+	mkdir -p $@
+
+# Pattern rule for compilation
+build/lib/%.go: src/%.scm | build/lib
+	@echo "Compiling $<..."
+	@guild compile -o $@ $<
+
+# Command targets
+.PHONY: build
+build: $(COMPILED_FILES) | build/bin
+	@cp -r bin/* build/bin/
+	@echo "Build complete in build/"
+#+end_src
+
+** Discussion Points
+
+1. Should we version bytecode files?
+2. How to handle platform-specific builds?
+3. Should demos be file targets that create output?
+4. Convention for test file discovery?
+
+** Next Steps
+
+- [ ] Refactor Makefile to use pattern rules
+- [ ] Add VERSION file or extract from git tags
+- [ ] Document all targets in help
+- [ ] Add dependency tracking for .scm includes
+- [ ] Consider using =.d= files for auto-dependencies
