@@ -1,0 +1,39 @@
+#+TITLE: LLM Actor Mock Experiment
+#+AUTHOR: AYGP-DR
+#+DATE: 2025-01-23
+
+* Overview
+
+This experiment mocks the LLM actor to demonstrate the control flow shown in the sequence diagram.
+It simulates various scenarios including:
+
+- Function call detection and execution
+- Multi-step tool use
+- Error handling
+- Final answer generation
+
+* Architecture
+
+The mock LLM actor:
+1. Receives prompts from the application actor
+2. Analyzes intent (mocked with pattern matching)
+3. Generates appropriate responses (function calls or final answers)
+4. Handles the complete conversation flow
+
+* Test Scenarios
+
+** Scenario 1: Simple Calculation
+User asks for a calculation, LLM calls calculator function.
+
+** Scenario 2: File Operations
+User asks to read/write files, LLM chains multiple file operations.
+
+** Scenario 3: Error Handling
+Test how the system handles function execution errors.
+
+** Scenario 4: Direct Answer
+User asks a question that doesn't require function calls.
+
+* Implementation
+
+See [[file:llm-actor-mock.scm][llm-actor-mock.scm]] for the implementation.
