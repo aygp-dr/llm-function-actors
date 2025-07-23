@@ -1,0 +1,537 @@
+#+TITLE: Ollama Tool Calling Validation - Implementation Notes
+#+AUTHOR: AYGP-DR
+#+DATE: 2025-01-23
+#+OPTIONS: toc:2 num:t
+
+* Introduction
+
+This document tracks the implementation and results of validating Ollama's tool calling capabilities with Llama 3.2 models.
+
+* Setup
+
+** Ollama Installation
+#+begin_src bash
+# Install Ollama (if not already installed)
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Pull Llama 3.2 models
+ollama pull llama3.2:1b
+ollama pull llama3.2:3b
+#+end_src
+
+** SSH Tunnel Configuration
+For remote development with local Ollama:
+#+begin_src bash
+# On remote machine, SSH with tunnel
+ssh -R 11434:localhost:11434 user@remote-host
+#+end_src
+
+* Implementation
+
+** Ollama Client Module
+#+begin_src scheme :tangle src/ollama-client.scm
+#!/usr/bin/env guile3
+!#
+
+;;; Ollama client for tool calling
+;;; Provides interface to Ollama API with tool support
+
+(define-module (ollama-client)
+  #:use-module (ice-9 format)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 textual-ports)
+  #:use-module (web client)
+  #:use-module (web uri)
+  #:use-module (json)
+  #:export (make-ollama-client
+            ollama-chat
+            ollama-generate
+            register-tool!))
+
+(define (make-ollama-client #:key (base-url "http://localhost:11434"))
+  "Create an Ollama client with specified base URL"
+  (let ((tools (make-hash-table)))
+    
+    (define (register-tool! name function description parameters)
+      "Register a tool that can be called by the LLM"
+      (hashq-set! tools name
+                  `((function . ,function)
+                    (description . ,description)
+                    (parameters . ,parameters))))
+    
+    (define (format-tools)
+      "Format registered tools for Ollama API"
+      (hash-map->list
+       (lambda (name tool)
+         `((type . "function")
+           (function . ((name . ,(symbol->string name))
+                       (description . ,(assq-ref tool 'description))
+                       (parameters . ,(assq-ref tool 'parameters))))))
+       tools))
+    
+    (define (call-api endpoint data)
+      "Make API call to Ollama"
+      (let* ((uri (string->uri (string-append base-url endpoint)))
+             (response (http-post uri
+                                 #:body (scm->json-string data)
+                                 #:headers '((content-type . "application/json"))))
+             (body (get-string-all (cadr response))))
+        (json-string->scm body)))
+    
+    (define (chat model messages #:key (temperature 0.7))
+      "Chat completion with tool support"
+      (let ((request `((model . ,model)
+                      (messages . ,messages)
+                      (tools . ,(format-tools))
+                      (temperature . ,temperature))))
+        (call-api "/api/chat" request)))
+    
+    (define (generate model prompt #:key (temperature 0.7))
+      "Simple text generation"
+      (let ((request `((model . ,model)
+                      (prompt . ,prompt)
+                      (temperature . ,temperature))))
+        (call-api "/api/generate" request)))
+    
+    ;; Return client interface
+    (lambda (method . args)
+      (case method
+        ((register-tool!) (apply register-tool! args))
+        ((chat) (apply chat args))
+        ((generate) (apply generate args))
+        ((get-tools) (format-tools))))))
+
+;; Convenience procedures
+(define (ollama-chat client model messages . args)
+  (apply (client 'chat) model messages args))
+
+(define (ollama-generate client model prompt . args)
+  (apply (client 'generate) model prompt args))
+
+(define (register-tool! client . args)
+  (apply (client 'register-tool!) args))
+#+end_src
+
+** File Tools Module
+#+begin_src scheme :tangle src/file-tools.scm
+#!/usr/bin/env guile3
+!#
+
+;;; File tools for Ollama tool calling
+;;; Minimal set of file operations
+
+(define-module (file-tools)
+  #:use-module (ice-9 format)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 ftw)
+  #:use-module (ice-9 textual-ports)
+  #:use-module (ice-9 regex)
+  #:export (read-file-tool
+            write-file-tool
+            list-files-tool
+            search-code-tool
+            register-file-tools!))
+
+(define (read-file-tool path)
+  "Read contents of a file"
+  (catch #t
+    (lambda ()
+      (call-with-input-file path get-string-all))
+    (lambda (key . args)
+      (format #f "Error reading file ~a: ~a" path (car args)))))
+
+(define (write-file-tool path content)
+  "Write content to a file"
+  (catch #t
+    (lambda ()
+      (call-with-output-file path
+        (lambda (port)
+          (display content port)))
+      (format #f "Successfully wrote ~a bytes to ~a" 
+              (string-length content) path))
+    (lambda (key . args)
+      (format #f "Error writing file ~a: ~a" path (car args)))))
+
+(define (list-files-tool directory)
+  "List files in a directory"
+  (catch #t
+    (lambda ()
+      (let ((files '()))
+        (ftw directory
+             (lambda (filename statinfo flag)
+               (when (eq? flag 'regular)
+                 (set! files (cons filename files)))
+               #t))
+        files))
+    (lambda (key . args)
+      (format #f "Error listing directory ~a: ~a" directory (car args)))))
+
+(define (search-code-tool pattern directory)
+  "Search for pattern in code files"
+  (catch #t
+    (lambda ()
+      (let ((matches '()))
+        (ftw directory
+             (lambda (filename statinfo flag)
+               (when (and (eq? flag 'regular)
+                         (or (string-suffix? ".scm" filename)
+                             (string-suffix? ".el" filename)
+                             (string-suffix? ".py" filename)
+                             (string-suffix? ".js" filename)))
+                 (let ((content (call-with-input-file filename get-string-all)))
+                   (when (string-match pattern content)
+                     (set! matches (cons filename matches)))))
+               #t))
+        matches))
+    (lambda (key . args)
+      (format #f "Error searching in ~a: ~a" directory (car args)))))
+
+(define (register-file-tools! client)
+  "Register all file tools with the Ollama client"
+  (register-tool! client 'read_file
+                  read-file-tool
+                  "Read the contents of a file"
+                  '((type . "object")
+                    (properties . ((path . ((type . "string")
+                                           (description . "Path to the file to read")))))
+                    (required . ("path"))))
+  
+  (register-tool! client 'write_file
+                  write-file-tool
+                  "Write content to a file"
+                  '((type . "object")
+                    (properties . ((path . ((type . "string")
+                                           (description . "Path to the file to write")))
+                                  (content . ((type . "string")
+                                             (description . "Content to write to the file")))))
+                    (required . ("path" "content"))))
+  
+  (register-tool! client 'list_files
+                  list-files-tool
+                  "List files in a directory"
+                  '((type . "object")
+                    (properties . ((directory . ((type . "string")
+                                                (description . "Directory path to list files from")))))
+                    (required . ("directory"))))
+  
+  (register-tool! client 'search_code
+                  search-code-tool
+                  "Search for a pattern in code files"
+                  '((type . "object")
+                    (properties . ((pattern . ((type . "string")
+                                              (description . "Regex pattern to search for")))
+                                  (directory . ((type . "string")
+                                               (description . "Directory to search in")))))
+                    (required . ("pattern" "directory")))))
+#+end_src
+
+** Integration Module
+#+begin_src scheme :tangle src/integration.scm
+#!/usr/bin/env guile3
+!#
+
+;;; Integration of Ollama client with file tools
+;;; Main entry point for experiments
+
+(add-to-load-path (dirname (current-filename)))
+
+(use-modules (ollama-client)
+             (file-tools)
+             (ice-9 format)
+             (ice-9 match)
+             (ice-9 pretty-print)
+             (srfi srfi-19))
+
+(define (log-event event-type message)
+  "Log events with timestamps for sequence diagram validation"
+  (format #t "[~a] ~a: ~a~%"
+          (date->string (current-date) "~H:~M:~S")
+          event-type
+          message))
+
+(define (process-tool-calls client response)
+  "Process tool calls from LLM response"
+  (let ((message (assq-ref response 'message)))
+    (when message
+      (let ((tool-calls (assq-ref message 'tool_calls)))
+        (when tool-calls
+          (map (lambda (tool-call)
+                 (let* ((function (assq-ref tool-call 'function))
+                        (name (string->symbol (assq-ref function 'name)))
+                        (args (assq-ref function 'arguments)))
+                   (log-event 'TOOL-CALL (format #f "Calling ~a with ~a" name args))
+                   ;; Execute the tool
+                   (let ((result (apply (client 'get-tool name) 
+                                       (map cdr (json-string->scm args)))))
+                     (log-event 'TOOL-RESULT (format #f "~a returned: ~a" name result))
+                     result)))
+               tool-calls))))))
+
+(define (run-conversation client model prompt)
+  "Run a complete conversation with tool calling"
+  (log-event 'START (format #f "Model: ~a, Prompt: ~a" model prompt))
+  
+  (let* ((messages `(((role . "user") (content . ,prompt))))
+         (response (ollama-chat client model messages)))
+    
+    (log-event 'LLM-RESPONSE "Initial response received")
+    (pretty-print response)
+    
+    ;; Process any tool calls
+    (let ((tool-results (process-tool-calls client response)))
+      (when tool-results
+        ;; Send tool results back to LLM
+        (let* ((updated-messages 
+                (append messages 
+                        (list (assq-ref response 'message))
+                        (map (lambda (result)
+                               `((role . "tool")
+                                 (content . ,result)))
+                             tool-results)))
+               (final-response (ollama-chat client model updated-messages)))
+          
+          (log-event 'FINAL-RESPONSE "Final response after tool execution")
+          (pretty-print final-response))))
+    
+    (log-event 'END "Conversation complete")))
+
+(define (main args)
+  (format #t "Ollama Tool Calling Validation~%")
+  (format #t "==============================~%~%")
+  
+  ;; Create client and register tools
+  (let ((client (make-ollama-client)))
+    (register-file-tools! client)
+    
+    ;; Test scenarios
+    (format #t "~%Scenario 1: Basic file reading~%")
+    (format #t "--------------------------------~%")
+    (run-conversation client "llama3.2:3b" 
+                     "Can you read the file README.md and summarize it?")
+    
+    (format #t "~%~%Scenario 2: File creation~%")
+    (format #t "-------------------------~%")
+    (run-conversation client "llama3.2:3b"
+                     "Create a file called test.txt with the content 'Hello from Ollama!'")
+    
+    (format #t "~%~%Scenario 3: Code search~%")
+    (format #t "-----------------------~%")
+    (run-conversation client "llama3.2:3b"
+                     "Search for functions that contain 'tool' in the src directory")))
+
+(main (command-line))
+#+end_src
+
+* Test Data
+
+** Sample README for testing
+#+begin_src markdown :tangle tests/test-data/README.md
+# Test Project
+
+This is a sample README for testing file operations.
+
+## Features
+- Feature 1: Reading files
+- Feature 2: Writing files
+- Feature 3: Searching code
+
+## Usage
+Run the main script to test tool calling.
+#+end_src
+
+** Sample code file
+#+begin_src scheme :tangle tests/test-data/sample.scm
+(define (sample-tool x y)
+  "A sample tool function for testing"
+  (+ x y))
+
+(define (another-function)
+  "This doesn't contain the search term"
+  (display "Hello"))
+#+end_src
+
+* Validation Suite
+
+#+begin_src scheme :tangle tests/validation-suite.scm
+#!/usr/bin/env guile3
+!#
+
+;;; Validation suite for Ollama tool calling
+
+(add-to-load-path (dirname (dirname (current-filename))))
+
+(use-modules (src ollama-client)
+             (src file-tools)
+             (ice-9 format)
+             (srfi srfi-64))
+
+(test-runner-factory 
+ (lambda () 
+   (let ((runner (test-runner-simple)))
+     (test-runner-on-test-end! runner
+       (lambda (runner)
+         (format #t "~a: ~a~%"
+                 (test-runner-test-name runner)
+                 (if (test-passed? runner) "PASS" "FAIL"))))
+     runner)))
+
+(test-begin "ollama-tool-validation")
+
+(test-group "Tool Registration"
+  (let ((client (make-ollama-client)))
+    (register-file-tools! client)
+    
+    (test-assert "Tools registered"
+                 (> (length (client 'get-tools)) 0))
+    
+    (test-equal "Four tools registered"
+                4
+                (length (client 'get-tools)))))
+
+(test-group "File Operations"
+  (test-assert "Read existing file"
+               (string? (read-file-tool "README.md")))
+  
+  (test-assert "Write and read file"
+               (begin
+                 (write-file-tool "test-output.txt" "Test content")
+                 (string=? "Test content" 
+                          (read-file-tool "test-output.txt"))))
+  
+  (test-assert "List files"
+               (list? (list-files-tool ".")))
+  
+  (test-assert "Search code"
+               (list? (search-code-tool "define" "."))))
+
+(test-end "ollama-tool-validation")
+#+end_src
+
+* Sequence Diagram Documentation
+
+#+begin_src markdown :tangle docs/sequence-diagram.md
+# Tool Calling Sequence Diagram
+
+This document shows the expected sequence of interactions for tool calling.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant GuileApp as Guile Application
+    participant Ollama as Ollama API
+    participant Tools as Tool Registry
+    
+    User->>GuileApp: Send prompt
+    GuileApp->>Ollama: Chat request with tools
+    Ollama->>GuileApp: Response with tool_calls
+    
+    loop For each tool call
+        GuileApp->>Tools: Execute tool(args)
+        Tools->>GuileApp: Return result
+    end
+    
+    GuileApp->>Ollama: Send tool results
+    Ollama->>GuileApp: Final response
+    GuileApp->>User: Display result
+```
+
+## Expected Flow
+
+1. **User Input**: User provides a prompt requiring tool usage
+2. **Initial Request**: Application sends prompt to Ollama with available tools
+3. **Tool Decision**: Ollama analyzes and returns tool_calls if needed
+4. **Tool Execution**: Application executes requested tools locally
+5. **Result Submission**: Tool results sent back to Ollama
+6. **Final Response**: Ollama incorporates results into final answer
+7. **User Output**: Application displays the complete response
+
+## Key Validation Points
+
+- Tool registration format matches Ollama expectations
+- Tool calls are properly parsed and executed
+- Results are correctly formatted for Ollama
+- Error handling maintains conversation flow
+- Performance through SSH tunnel is acceptable
+#+end_src
+
+* Tool Analytics Documentation
+
+#+begin_src markdown :tangle docs/tool-analytics.md
+# Tool Usage Analytics
+
+## Minimal Tool Set Coverage
+
+Our 4-tool set covers approximately 25% of typical coding assistant operations:
+
+### Included Operations
+1. **read_file** - View existing code/documentation
+2. **write_file** - Create/modify files
+3. **list_files** - Navigate project structure  
+4. **search_code** - Find patterns/implementations
+
+### Common Operations NOT Included
+- Execute commands (bash, make, etc.)
+- Git operations (status, commit, push)
+- Package management (npm, pip, etc.)
+- Testing/debugging
+- Code formatting/linting
+- Web requests
+- Database queries
+
+## Comparison with Production Assistants
+
+| Feature | Our Implementation | Claude Code | GitHub Copilot |
+|---------|-------------------|-------------|----------------|
+| File Read | ✓ | ✓ | ✓ |
+| File Write | ✓ | ✓ | ✓ |
+| File List | ✓ | ✓ | ✓ |
+| Code Search | ✓ | ✓ | ✓ |
+| Command Execution | ✗ | ✓ | ✗ |
+| Git Integration | ✗ | ✓ | ✓ |
+| Web Requests | ✗ | ✓ | ✗ |
+| Multi-file Edit | ✗ | ✓ | ✓ |
+
+## Performance Metrics
+
+Expected performance through SSH tunnel:
+- Tool registration: < 100ms
+- Initial chat request: 500-2000ms (model dependent)
+- Tool execution: < 50ms (local)
+- Round-trip with tool: 1000-3000ms
+
+## Expansion Opportunities
+
+Priority additions for broader coverage:
+1. Command execution (controlled subprocess)
+2. Git operations (status, diff, commit)
+3. Multi-file operations (bulk edit/rename)
+4. Simple web requests (fetch documentation)
+#+end_src
+
+* Results and Observations
+
+** Setup Results
+- [ ] Ollama installation status
+- [ ] Llama 3.2 model availability
+- [ ] SSH tunnel performance
+
+** Test Results
+- [ ] Basic tool recognition rate
+- [ ] File operation success rate
+- [ ] Complex workflow completion
+- [ ] Error handling effectiveness
+
+** Performance Measurements
+- [ ] Latency per operation type
+- [ ] Throughput for multi-tool sequences
+- [ ] SSH tunnel overhead
+
+** Gap Analysis
+- [ ] Missing capabilities vs production tools
+- [ ] LLM limitations discovered
+- [ ] Integration challenges
+
+* Conclusions
+
+TBD after experiment completion.
+#+end_src

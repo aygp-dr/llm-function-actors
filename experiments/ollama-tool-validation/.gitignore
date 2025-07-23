@@ -1,0 +1,13 @@
+# Compiled Guile files
+*.go
+*~
+
+# Test outputs
+test-output.txt
+tests/test-data/test-output.txt
+
+# Logs
+*.log
+
+# Temporary files
+.#*
