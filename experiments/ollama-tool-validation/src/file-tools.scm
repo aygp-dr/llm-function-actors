@@ -20,9 +20,13 @@
   "Read contents of a file"
   (catch #t
     (lambda ()
-      (call-with-input-file path get-string-all))
+      (let ((content (call-with-input-file path get-string-all)))
+        `((success . #t)
+          (content . ,content)
+          (path . ,path))))
     (lambda (key . args)
-      (format #f "Error reading file ~a: ~a" path (car args)))))
+      `((success . #f)
+        (error . ,(format #f "Error reading file ~a: ~a" path (car args)))))))
 
 (define (write-file-tool path content)
   "Write content to a file"
@@ -31,10 +35,13 @@
       (call-with-output-file path
         (lambda (port)
           (display content port)))
-      (format #f "Successfully wrote ~a bytes to ~a" 
-              (string-length content) path))
+      `((success . #t)
+        (message . ,(format #f "Successfully wrote ~a bytes to ~a" 
+                           (string-length content) path))
+        (path . ,path)))
     (lambda (key . args)
-      (format #f "Error writing file ~a: ~a" path (car args)))))
+      `((success . #f)
+        (error . ,(format #f "Error writing file ~a: ~a" path (car args)))))))
 
 (define (list-files-tool directory)
   "List files in a directory"
@@ -46,9 +53,12 @@
                (when (eq? flag 'regular)
                  (set! files (cons filename files)))
                #t))
-        files))
+        `((success . #t)
+          (files . ,(reverse files))
+          (count . ,(length files)))))
     (lambda (key . args)
-      (format #f "Error listing directory ~a: ~a" directory (car args)))))
+      `((success . #f)
+        (error . ,(format #f "Error listing directory ~a: ~a" directory (car args)))))))
 
 (define (search-code-tool pattern directory)
   "Search for pattern in code files"
@@ -66,9 +76,13 @@
                    (when (string-match pattern content)
                      (set! matches (cons filename matches)))))
                #t))
-        matches))
+        `((success . #t)
+          (matches . ,(reverse matches))
+          (pattern . ,pattern)
+          (count . ,(length matches)))))
     (lambda (key . args)
-      (format #f "Error searching in ~a: ~a" directory (car args)))))
+      `((success . #f)
+        (error . ,(format #f "Error searching in ~a: ~a" directory (car args)))))))
 
 (define (register-file-tools! client)
   "Register all file tools with the Ollama client"

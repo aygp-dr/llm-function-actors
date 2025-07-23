@@ -1,0 +1,9 @@
+This is an example text file for testing the read_file tool.
+
+It contains multiple lines and demonstrates that our file reading
+functionality works correctly through the Ollama API.
+
+The file tools should be able to:
+- Read this content
+- Return it to the LLM
+- Allow the LLM to summarize or analyze it

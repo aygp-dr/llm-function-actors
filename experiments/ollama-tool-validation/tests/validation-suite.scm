@@ -35,18 +35,23 @@
 
 (test-group "File Operations"
   (test-assert "Read existing file"
-               (string? (read-file-tool "README.md")))
+               (let ((result (read-file-tool "README.org")))
+                 (assq-ref result 'success)))
   
   (test-assert "Write and read file"
                (begin
                  (write-file-tool "test-output.txt" "Test content")
-                 (string=? "Test content" 
-                          (read-file-tool "test-output.txt"))))
+                 (let ((result (read-file-tool "test-output.txt")))
+                   (and (assq-ref result 'success)
+                        (string=? "Test content" 
+                                 (assq-ref result 'content))))))
   
-  (test-assert "List files"
-               (list? (list-files-tool ".")))
+  (test-assert "List files returns alist"
+               (let ((result (list-files-tool ".")))
+                 (assq-ref result 'success)))
   
-  (test-assert "Search code"
-               (list? (search-code-tool "define" "."))))
+  (test-assert "Search code returns alist"
+               (let ((result (search-code-tool "define" ".")))
+                 (assq-ref result 'success))))
 
 (test-end "ollama-tool-validation")

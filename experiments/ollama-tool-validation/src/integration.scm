@@ -2,7 +2,7 @@
 !#
 
 ;;; Integration of Ollama client with file tools
-;;; Main entry point for experiments
+;;; Main entry point for experiments with comprehensive flow tracing
 
 (add-to-load-path (dirname (current-filename)))
 
@@ -13,62 +13,132 @@
              (ice-9 pretty-print)
              (srfi srfi-19))
 
-(define (log-event event-type message)
+;; Set debug logging for detailed trace
+(set-log-level! 'debug)
+
+(define (print-banner)
+  "Print visual banner"
+  (format #t "~%╔════════════════════════════════════════════╗~%")
+  (format #t "║        FLOW TRACE VISUALIZATION            ║~%")
+  (format #t "╚════════════════════════════════════════════╝~%~%"))
+
+(define (log-event tag message)
   "Log events with timestamps for sequence diagram validation"
-  (format #t "[~a] ~a: ~a~%"
-          (date->string (current-date) "~H:~M:~S")
-          event-type
+  (format #t "~a [OLLAMA-TOOLS] [INFO] ~a: ~a~%"
+          (date->string (current-date) "~Y-~m-~d ~H:~M:~S")
+          tag
           message))
 
 (define (process-tool-calls client response)
-  "Process tool calls from LLM response"
+  "Process tool calls from LLM response with detailed logging"
   (let ((message (assq-ref response 'message)))
     (when message
       (let ((tool-calls (assq-ref message 'tool_calls)))
         (when tool-calls
-          (map (lambda (tool-call)
-                 (let* ((function (assq-ref tool-call 'function))
-                        (name (string->symbol (assq-ref function 'name)))
-                        (args (assq-ref function 'arguments)))
-                   (log-event 'TOOL-CALL (format #f "Calling ~a with ~a" name args))
-                   ;; Execute the tool
-                   (let ((result (apply (client 'get-tool name) 
-                                       (map cdr (json-string->scm args)))))
-                     (log-event 'TOOL-RESULT (format #f "~a returned: ~a" name result))
-                     result)))
-               tool-calls))))))
+          (log-event 'DECISION 
+                     (format #f "LLM requested ~a tool call(s)" (length tool-calls)))
+          (log-event 'TOOL-LOOP 
+                     (format #f "Processing ~a tool call(s)" (length tool-calls)))
+          
+          (let loop ((calls tool-calls)
+                     (index 1)
+                     (results '()))
+            (if (null? calls)
+                (begin
+                  (log-event 'TOOL-LOOP "All tools executed, sending results back to LLM")
+                  (reverse results))
+                (let* ((tool-call (car calls))
+                       (function (assq-ref tool-call 'function))
+                       (name (string->symbol (assq-ref function 'name)))
+                       (args (assq-ref function 'arguments)))
+                  
+                  (log-event 'TOOL-LOOP 
+                             (format #f "Processing tool call ~a/~a" index (length tool-calls)))
+                  (log-event 'EXECUTE 
+                             (format #f "Looking up function: ~a" name))
+                  (format #t "~a [OLLAMA-TOOLS] [DEBUG] EXECUTE: Arguments: ~a~%"
+                          (date->string (current-date) "~Y-~m-~d ~H:~M:~S")
+                          args)
+                  
+                  ;; Execute the tool
+                  (let* ((tool-fn (client 'get-tool name))
+                         (parsed-args (json-string->scm args))
+                         (result (if tool-fn
+                                    (apply tool-fn (map cdr parsed-args))
+                                    `((success . #f) 
+                                      (error . ,(format #f "Tool ~a not found" name))))))
+                    
+                    (log-event 'EXECUTE 
+                               (format #f "Function ~a returned: ~a" name result))
+                    
+                    (loop (cdr calls)
+                          (+ index 1)
+                          (cons result results)))))))))))
 
 (define (run-conversation client model prompt)
-  "Run a complete conversation with tool calling"
-  (log-event 'START (format #f "Model: ~a, Prompt: ~a" model prompt))
+  "Run a complete conversation with tool calling and visual flow"
+  (log-event 'INTERACTION "===== NEW CHAT SESSION =====")
+  (log-event 'USER (format #f "Prompt: ~a" prompt))
+  (log-event 'SETUP (format #f "Initialized client with model: ~a" model))
+  
+  (let* ((tools (client 'get-tools)))
+    (log-event 'SETUP (format #f "Registered ~a tools" (length tools)))
+    (format #t "~a [OLLAMA-TOOLS] [DEBUG] SETUP: Tools: ~a~%"
+            (date->string (current-date) "~Y-~m-~d ~H:~M:~S")
+            (map (lambda (t) (string->symbol (assq-ref (assq-ref t 'function) 'name)))
+                 tools)))
   
   (let* ((messages `(((role . "user") (content . ,prompt))))
          (response (ollama-chat client model messages)))
     
     (log-event 'LLM-RESPONSE "Initial response received")
-    (pretty-print response)
     
     ;; Process any tool calls
     (let ((tool-results (process-tool-calls client response)))
-      (when tool-results
-        ;; Send tool results back to LLM
-        (let* ((updated-messages 
-                (append messages 
-                        (list (assq-ref response 'message))
-                        (map (lambda (result)
-                               `((role . "tool")
-                                 (content . ,result)))
-                             tool-results)))
-               (final-response (ollama-chat client model updated-messages)))
+      (if tool-results
+          ;; Send tool results back to LLM
+          (let* ((updated-messages 
+                  (append messages 
+                          (list (assq-ref response 'message))
+                          (map (lambda (result)
+                                 `((role . "tool")
+                                   (content . ,(scm->json-string result))))
+                               tool-results)))
+                 (final-response (begin
+                                  (log-event 'LLM-REQUEST 
+                                             "Requesting final answer with tool results")
+                                  (ollama-chat client model updated-messages))))
+            
+            (log-event 'RESPONSE 
+                       (format #f "Final answer: ~a" 
+                               (let ((msg (assq-ref final-response 'message)))
+                                 (if msg
+                                     (let ((content (assq-ref msg 'content)))
+                                       (if (> (string-length content) 60)
+                                           (string-append (substring content 0 60) "...")
+                                           content))
+                                     "No response")))))
           
-          (log-event 'FINAL-RESPONSE "Final response after tool execution")
-          (pretty-print final-response))))
+          ;; No tool calls, direct answer
+          (log-event 'RESPONSE "Direct answer provided (no tools needed)")))
     
-    (log-event 'END "Conversation complete")))
+    (log-event 'INTERACTION "===== SESSION COMPLETE =====")))
+
+(define (print-flow-summary)
+  "Print a flow summary"
+  (format #t "~%Flow Summary:~%")
+  (format #t "1. USER → APP: Send prompt~%")
+  (format #t "2. APP → REGISTRY: Register 4 file tools~%")
+  (format #t "3. APP → LLM: Send prompt + tool definitions~%")
+  (format #t "4. LLM → APP: Request tool call (read_file)~%")
+  (format #t "5. APP → REGISTRY: Lookup read_file function~%")
+  (format #t "6. APP → APP: Execute read_file('example.txt')~%")
+  (format #t "7. APP → LLM: Return file contents~%")
+  (format #t "8. LLM → APP: Final summarized answer~%")
+  (format #t "9. APP → USER: Display response~%"))
 
 (define (main args)
-  (format #t "Ollama Tool Calling Validation~%")
-  (format #t "==============================~%~%")
+  (print-banner)
   
   ;; Create client and register tools
   (let ((client (make-ollama-client)))
@@ -78,7 +148,7 @@
     (format #t "~%Scenario 1: Basic file reading~%")
     (format #t "--------------------------------~%")
     (run-conversation client "llama3.2:3b" 
-                     "Can you read the file README.md and summarize it?")
+                     "Can you read the file README.org and summarize it?")
     
     (format #t "~%~%Scenario 2: File creation~%")
     (format #t "-------------------------~%")
@@ -88,6 +158,8 @@
     (format #t "~%~%Scenario 3: Code search~%")
     (format #t "-----------------------~%")
     (run-conversation client "llama3.2:3b"
-                     "Search for functions that contain 'tool' in the src directory")))
+                     "Search for functions that contain 'tool' in the src directory")
+    
+    (print-flow-summary)))
 
 (main (command-line))
