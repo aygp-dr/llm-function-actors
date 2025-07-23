@@ -1,0 +1,18 @@
+# Environment files
+.env
+.env.local
+
+# API keys
+*.key
+config/secrets.scm
+
+# Temporary files
+*~
+*.log
+
+# Guile compiled files
+*.go
+
+# Test outputs
+test-results/
+*.tmp

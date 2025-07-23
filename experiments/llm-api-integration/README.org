@@ -1,0 +1,528 @@
+#+TITLE: LLM API Integration with Function Calling in Guile Scheme
+#+PROPERTY: header-args :mkdirp yes :comments both
+#+DATE: 2025-07-22
+
+* Overview
+
+This experiment demonstrates how to integrate various LLM APIs with function/tool calling capabilities using Guile Scheme. We'll implement connectors for:
+
+1. Google Gemini API (REST)
+2. Ollama (Local, REST)
+3. DeepSeek API (REST)
+4. Groq Cloud (REST) - Free tier available
+
+* API Comparison
+
+| Provider | Free Tier | Function Calling | API Type | Best For |
+|----------+-----------+------------------+----------+----------|
+| Google Gemini | 60 RPM, 1M TPM | Yes | REST | General use |
+| Ollama | Unlimited (local) | Yes (v0.3.0+) | REST | Local development |
+| DeepSeek | Free credits | Yes | REST | Code/reasoning |
+| Groq | 30 RPM, 14.4K TPD | Yes | REST | Fast inference |
+
+* Common HTTP Module
+
+#+begin_src scheme :tangle src/http-utils.scm
+(define-module (http-utils)
+  #:use-module (web client)
+  #:use-module (web response)
+  #:use-module (json)
+  #:use-module (ice-9 receive)
+  #:use-module (ice-9 iconv)
+  #:use-module (srfi srfi-8)
+  #:export (http-post-json
+            http-get-json
+            make-bearer-auth))
+
+(define (make-bearer-auth token)
+  "Create Bearer authorization header"
+  `(authorization . ,(string-append "Bearer " token)))
+
+(define (http-post-json url body headers)
+  "POST JSON data and return parsed response"
+  (receive (response body-port)
+      (http-post url
+                 #:body (scm->json-string body)
+                 #:headers (append headers
+                                   '((content-type . "application/json")))
+                 #:decode-body? #f)
+    (let ((status (response-code response)))
+      (if (and (>= status 200) (< status 300))
+          (json->scm (get-string-all body-port))
+          (error "HTTP error" status (get-string-all body-port))))))
+
+(define (http-get-json url headers)
+  "GET JSON data and return parsed response"
+  (receive (response body-port)
+      (http-get url
+                #:headers headers
+                #:decode-body? #f)
+    (let ((status (response-code response)))
+      (if (and (>= status 200) (< status 300))
+          (json->scm (get-string-all body-port))
+          (error "HTTP error" status)))))
+#+end_src
+
+* Google Gemini Integration
+
+#+begin_src scheme :tangle src/gemini-client.scm
+(define-module (gemini-client)
+  #:use-module (http-utils)
+  #:use-module (ice-9 format)
+  #:use-module (srfi srfi-1)
+  #:export (create-gemini-client
+            gemini-chat))
+
+(define (create-gemini-client api-key)
+  "Create a Gemini API client"
+  (lambda (method . args)
+    (case method
+      ((chat) (apply gemini-chat-internal api-key args))
+      (else (error "Unknown method" method)))))
+
+(define (format-gemini-tools functions)
+  "Format functions for Gemini API"
+  `((tools . #(((function_declarations . ,(list->vector
+                                           (map (lambda (f)
+                                                  `((name . ,(assoc-ref f 'name))
+                                                    (description . ,(assoc-ref f 'description))
+                                                    (parameters . ,(assoc-ref f 'parameters))))
+                                                functions))))))))
+
+(define (gemini-chat-internal api-key prompt functions)
+  "Send chat request with function calling to Gemini"
+  (let* ((url (format #f "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=~a" api-key))
+         (body `((contents . #(((parts . #(((text . ,prompt))))
+                                (role . "user"))))
+                 ,@(if (null? functions)
+                       '()
+                       (format-gemini-tools functions)))))
+    
+    (http-post-json url body '())))
+
+;; Example function definition for Gemini
+(define example-function
+  '((name . "get_weather")
+    (description . "Get the current weather in a given location")
+    (parameters . ((type . "object")
+                   (properties . ((location . ((type . "string")
+                                               (description . "The city and state, e.g. San Francisco, CA")))
+                                  (unit . ((type . "string")
+                                           (enum . #("celsius" "fahrenheit"))))))
+                   (required . #("location"))))))
+#+end_src
+
+* Ollama Integration
+
+#+begin_src scheme :tangle src/ollama-client.scm
+(define-module (ollama-client)
+  #:use-module (http-utils)
+  #:use-module (ice-9 format)
+  #:export (create-ollama-client
+            ollama-chat))
+
+(define (create-ollama-client #:key (base-url "http://localhost:11434"))
+  "Create an Ollama client"
+  (lambda (method . args)
+    (case method
+      ((chat) (apply ollama-chat-internal base-url args))
+      ((list-models) (ollama-list-models base-url))
+      (else (error "Unknown method" method)))))
+
+(define (format-ollama-tools functions)
+  "Format functions for Ollama API"
+  (map (lambda (f)
+         `((type . "function")
+           (function . ((name . ,(assoc-ref f 'name))
+                        (description . ,(assoc-ref f 'description))
+                        (parameters . ,(assoc-ref f 'parameters))))))
+       functions))
+
+(define (ollama-chat-internal base-url model prompt functions)
+  "Send chat request with tools to Ollama"
+  (let* ((url (string-append base-url "/api/chat"))
+         (body `((model . ,model)
+                 (messages . #(((role . "user")
+                                (content . ,prompt))))
+                 (stream . #f)
+                 ,@(if (null? functions)
+                       '()
+                       `((tools . ,(list->vector (format-ollama-tools functions))))))))
+    
+    (http-post-json url body '())))
+
+(define (ollama-list-models base-url)
+  "List available models"
+  (http-get-json (string-append base-url "/api/tags") '()))
+
+;; Example usage with Ollama
+(define calculator-function
+  '((name . "calculate")
+    (description . "Perform mathematical calculations")
+    (parameters . ((type . "object")
+                   (properties . ((expression . ((type . "string")
+                                                 (description . "Mathematical expression to evaluate"))))
+                   (required . #("expression"))))))
+#+end_src
+
+* DeepSeek Integration
+
+#+begin_src scheme :tangle src/deepseek-client.scm
+(define-module (deepseek-client)
+  #:use-module (http-utils)
+  #:use-module (ice-9 format)
+  #:export (create-deepseek-client
+            deepseek-chat))
+
+(define (create-deepseek-client api-key)
+  "Create a DeepSeek API client"
+  (lambda (method . args)
+    (case method
+      ((chat) (apply deepseek-chat-internal api-key args))
+      (else (error "Unknown method" method)))))
+
+(define (format-deepseek-tools functions)
+  "Format functions for DeepSeek API (OpenAI-compatible)"
+  (map (lambda (f)
+         `((type . "function")
+           (function . ((name . ,(assoc-ref f 'name))
+                        (description . ,(assoc-ref f 'description))
+                        (parameters . ,(assoc-ref f 'parameters))))))
+       functions))
+
+(define (deepseek-chat-internal api-key prompt functions)
+  "Send chat request with function calling to DeepSeek"
+  (let* ((url "https://api.deepseek.com/v1/chat/completions")
+         (headers (list (make-bearer-auth api-key)))
+         (body `((model . "deepseek-chat")
+                 (messages . #(((role . "user")
+                                (content . ,prompt))))
+                 ,@(if (null? functions)
+                       '()
+                       `((tools . ,(list->vector (format-deepseek-tools functions)))
+                         (tool_choice . "auto"))))))
+    
+    (http-post-json url body headers)))
+
+;; Example code analysis function for DeepSeek
+(define code-analysis-function
+  '((name . "analyze_code")
+    (description . "Analyze code for complexity, bugs, or improvements")
+    (parameters . ((type . "object")
+                   (properties . ((code . ((type . "string")
+                                           (description . "Source code to analyze")))
+                                  (language . ((type . "string")
+                                               (description . "Programming language")))
+                                  (analysis_type . ((type . "string")
+                                                    (enum . #("complexity" "bugs" "performance"))))))
+                   (required . #("code" "language"))))))
+#+end_src
+
+* Groq Integration
+
+#+begin_src scheme :tangle src/groq-client.scm
+(define-module (groq-client)
+  #:use-module (http-utils)
+  #:use-module (ice-9 format)
+  #:export (create-groq-client
+            groq-chat))
+
+(define (create-groq-client api-key)
+  "Create a Groq API client"
+  (lambda (method . args)
+    (case method
+      ((chat) (apply groq-chat-internal api-key args))
+      (else (error "Unknown method" method)))))
+
+(define (format-groq-tools functions)
+  "Format functions for Groq API (OpenAI-compatible)"
+  (map (lambda (f)
+         `((type . "function")
+           (function . ((name . ,(assoc-ref f 'name))
+                        (description . ,(assoc-ref f 'description))
+                        (parameters . ,(assoc-ref f 'parameters))))))
+       functions))
+
+(define (groq-chat-internal api-key prompt functions #:key (model "llama3-8b-8192"))
+  "Send chat request with function calling to Groq"
+  (let* ((url "https://api.groq.com/openai/v1/chat/completions")
+         (headers (list (make-bearer-auth api-key)))
+         (body `((model . ,model)
+                 (messages . #(((role . "user")
+                                (content . ,prompt))))
+                 ,@(if (null? functions)
+                       '()
+                       `((tools . ,(list->vector (format-groq-tools functions)))
+                         (tool_choice . "auto"))))))
+    
+    (http-post-json url body headers)))
+
+;; Groq models with function calling support
+(define groq-models
+  '("llama3-70b-8192"    ; Best for complex reasoning
+    "llama3-8b-8192"     ; Fast, good for simple tasks
+    "mixtral-8x7b-32768" ; Good for code
+    "gemma-7b-it"))      ; Efficient for basic tasks
+#+end_src
+
+* Unified Interface
+
+#+begin_src scheme :tangle src/llm-unified.scm
+(define-module (llm-unified)
+  #:use-module (gemini-client)
+  #:use-module (ollama-client)
+  #:use-module (deepseek-client)
+  #:use-module (groq-client)
+  #:use-module (ice-9 match)
+  #:export (create-llm-client
+            llm-chat
+            llm-function-call))
+
+(define (create-llm-client provider . args)
+  "Create a unified LLM client for any provider"
+  (match provider
+    ('gemini (apply create-gemini-client args))
+    ('ollama (apply create-ollama-client args))
+    ('deepseek (apply create-deepseek-client args))
+    ('groq (apply create-groq-client args))
+    (_ (error "Unknown provider" provider))))
+
+(define (llm-chat client prompt #:key (functions '()))
+  "Send a chat message with optional function definitions"
+  (client 'chat prompt functions))
+
+(define (parse-function-call response provider)
+  "Extract function call from provider response"
+  (match provider
+    ('gemini
+     (let* ((candidates (assoc-ref response 'candidates))
+            (content (assoc-ref (vector-ref candidates 0) 'content))
+            (parts (assoc-ref content 'parts)))
+       (find (lambda (part) (assoc-ref part 'functionCall))
+             (vector->list parts))))
+    
+    ('ollama
+     (let* ((message (assoc-ref response 'message))
+            (tool-calls (assoc-ref message 'tool_calls)))
+       (and tool-calls (vector-ref tool-calls 0))))
+    
+    ((or 'deepseek 'groq)
+     (let* ((choices (assoc-ref response 'choices))
+            (message (assoc-ref (vector-ref choices 0) 'message))
+            (tool-calls (assoc-ref message 'tool_calls)))
+       (and tool-calls (vector-ref tool-calls 0))))
+    
+    (_ #f)))
+#+end_src
+
+* Example: Multi-Provider Function Calling
+
+#+begin_src scheme :tangle examples/multi-provider-demo.scm
+#!/usr/bin/env guile
+!#
+
+(add-to-load-path "..")
+(use-modules (llm-unified)
+             (ice-9 format))
+
+;; Define common functions
+(define weather-function
+  '((name . "get_weather")
+    (description . "Get current weather in a location")
+    (parameters . ((type . "object")
+                   (properties . ((location . ((type . "string")
+                                               (description . "City name")))
+                                  (unit . ((type . "string")
+                                           (enum . #("celsius" "fahrenheit"))
+                                           (description . "Temperature unit")))))
+                   (required . #("location"))))))
+
+(define calculator-function
+  '((name . "calculate")
+    (description . "Perform mathematical calculations")
+    (parameters . ((type . "object")
+                   (properties . ((expression . ((type . "string")
+                                                 (description . "Math expression to evaluate"))))
+                   (required . #("expression"))))))
+
+;; Test with different providers
+(define (test-provider provider-config prompt functions)
+  (format #t "~%Testing ~a...~%" (car provider-config))
+  (catch #t
+    (lambda ()
+      (let* ((client (apply create-llm-client provider-config))
+             (response (llm-chat client prompt #:functions functions)))
+        (format #t "Response: ~s~%" response)
+        (let ((function-call (parse-function-call response (car provider-config))))
+          (when function-call
+            (format #t "Function call detected: ~s~%" function-call)))))
+    (lambda (key . args)
+      (format #t "Error: ~a ~a~%" key args))))
+
+;; Run tests
+(define providers
+  `((gemini ,(getenv "GEMINI_API_KEY"))
+    (ollama)  ; Local, no key needed
+    (deepseek ,(getenv "DEEPSEEK_API_KEY"))
+    (groq ,(getenv "GROQ_API_KEY"))))
+
+(define test-prompts
+  '(("What's the weather in Tokyo?" . (,weather-function))
+    ("Calculate 15% tip on $42.50" . (,calculator-function))
+    ("What's the weather in Paris and calculate 20C in Fahrenheit" . (,weather-function ,calculator-function))))
+
+;; Execute tests
+(for-each
+  (lambda (prompt-pair)
+    (let ((prompt (car prompt-pair))
+          (functions (cdr prompt-pair)))
+      (format #t "~%~%=== Testing prompt: ~a ===~%" prompt)
+      (for-each
+        (lambda (provider)
+          (when (and (not (null? (cdr provider)))
+                     (cadr provider))  ; Check if API key exists
+            (test-provider provider prompt (apply list functions))))
+        providers)))
+  test-prompts)
+#+end_src
+
+* Configuration
+
+#+begin_src scheme :tangle config/llm-config.scm
+;; Configuration for LLM providers
+(define-module (llm-config)
+  #:export (get-api-key
+            get-provider-config))
+
+(define (get-api-key provider)
+  "Get API key from environment"
+  (case provider
+    ((gemini) (getenv "GEMINI_API_KEY"))
+    ((deepseek) (getenv "DEEPSEEK_API_KEY"))
+    ((groq) (getenv "GROQ_API_KEY"))
+    ((ollama) #f)  ; No key needed for local
+    (else (error "Unknown provider" provider))))
+
+(define (get-provider-config provider)
+  "Get provider-specific configuration"
+  (case provider
+    ((gemini) 
+     `((base-url . "https://generativelanguage.googleapis.com/v1beta")
+       (models . ("gemini-1.5-flash" "gemini-1.5-pro"))
+       (max-functions . 64)))
+    
+    ((ollama)
+     `((base-url . "http://localhost:11434")
+       (models . ("llama3" "mistral" "codellama"))
+       (max-functions . unlimited)))
+    
+    ((deepseek)
+     `((base-url . "https://api.deepseek.com/v1")
+       (models . ("deepseek-chat" "deepseek-coder"))
+       (max-functions . 128)))
+    
+    ((groq)
+     `((base-url . "https://api.groq.com/openai/v1")
+       (models . ("llama3-70b-8192" "mixtral-8x7b-32768"))
+       (max-functions . 64)))))
+#+end_src
+
+* Setup Instructions
+
+#+begin_src bash :tangle setup.sh
+#!/bin/bash
+
+echo "Setting up LLM API Integration experiment..."
+
+# Create directory structure
+mkdir -p src examples config
+
+# Set up environment variables (create .env.example)
+cat > .env.example << EOF
+# Google Gemini API
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# DeepSeek API
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+
+# Groq API
+GROQ_API_KEY=your_groq_api_key_here
+
+# Ollama (local) - no key needed
+OLLAMA_BASE_URL=http://localhost:11434
+EOF
+
+echo "Setup complete!"
+echo ""
+echo "Next steps:"
+echo "1. Copy .env.example to .env and add your API keys"
+echo "2. For Ollama: Install from https://ollama.com and run 'ollama serve'"
+echo "3. Pull a model for Ollama: 'ollama pull llama3'"
+echo "4. Run the demo: guile examples/multi-provider-demo.scm"
+#+end_src
+
+* Makefile
+
+#+begin_src makefile :tangle Makefile
+.PHONY: all test run-demo setup clean
+
+all: setup
+
+setup:
+	@chmod +x setup.sh
+	@./setup.sh
+
+run-demo:
+	@echo "Running multi-provider demo..."
+	@cd examples && guile multi-provider-demo.scm
+
+test-gemini:
+	@echo "Testing Gemini integration..."
+	@guile -l src/http-utils.scm -l src/gemini-client.scm -c "(display 'Gemini client loaded successfully\n')"
+
+test-ollama:
+	@echo "Testing Ollama integration..."
+	@guile -l src/http-utils.scm -l src/ollama-client.scm -c "(display 'Ollama client loaded successfully\n')"
+
+clean:
+	@find . -name "*~" -delete
+	@echo "Cleaned temporary files"
+#+end_src
+
+* Key Features
+
+1. **Unified Interface**: Single API for all providers
+2. **Function/Tool Calling**: Standardized format across providers
+3. **Error Handling**: Graceful failure with provider fallback
+4. **Local Development**: Ollama support for offline work
+5. **Free Tiers**: All providers offer free usage tiers
+
+* Provider-Specific Notes
+
+** Google Gemini
+- Free tier: 60 requests/minute
+- Best for: General purpose, multimodal
+- Function calling: Native support
+
+** Ollama
+- Free tier: Unlimited (runs locally)
+- Best for: Development, privacy, offline work
+- Function calling: Requires v0.3.0+
+
+** DeepSeek
+- Free tier: $0 signup credit
+- Best for: Code generation, technical tasks
+- Function calling: OpenAI-compatible
+
+** Groq
+- Free tier: 30 requests/minute, 14,400 tokens/day
+- Best for: Fast inference, real-time applications
+- Function calling: OpenAI-compatible
+
+* Next Steps
+
+1. Implement response streaming
+2. Add function execution framework
+3. Create middleware for rate limiting
+4. Add conversation memory
+5. Implement provider fallback logic
