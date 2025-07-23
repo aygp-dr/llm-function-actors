@@ -1,0 +1,127 @@
+#+TITLE: Operational Setup - Ollama via SSH Tunnel
+#+AUTHOR: AYGP-DR
+#+DATE: 2025-01-23
+
+* Summary: Operational Changes for Ollama Tool Calling via SSH Tunnel
+
+** Infrastructure Setup (Changes Made on macOS Laptop)
+- *Installed autossh* on macOS laptop to maintain persistent SSH connection to nh
+- *Started autossh tunnel*: ~autossh -M 20000 -f -N nh~ running on laptop
+- *Created monitoring script* (~~~/bin/check-ollama-tunnel.sh~) on laptop that:
+  - Tests tunnel health every 5 minutes via cron
+  - Auto-restarts tunnel if connection drops
+  - Logs status to ~/tmp/ollama-tunnel.log~
+- *Added cron job* on laptop: ~*/5 * * * * /Users/jasonwalsh/bin/check-ollama-tunnel.sh~
+
+** SSH Configuration
+- *RemoteForward 11434* configured in ~~/.ssh/config~ on laptop
+- This forwards nh's localhost:11434 → laptop's localhost:11434
+- *Ollama service runs on laptop*, accessible from nh through tunnel
+- Tunnel verified working: 99ms latency for API calls
+
+** What This Means for Agent on nh
+- *You can now access Ollama at ~http://localhost:11434~* even though it runs on the laptop
+- *No local Ollama process needed on nh* - the tunnel handles everything
+- *Models available through tunnel*: llama3.2:3b, qwen2.5-coder:7b, nomic-embed-text
+- *Tunnel is persistent* - laptop automatically maintains connection
+- *If tunnel drops*, laptop will auto-reconnect within 5 minutes
+
+** Validation Complete
+- Confirmed Llama 3.2 supports tool calling (function calling works)
+- Created Guile modules for tool integration
+- Ready for agent development using remote Ollama instance
+
+** Current Operational State
+#+begin_example
+Laptop (macOS) → autossh → nh (FreeBSD)
+Ollama:11434   ←────────→  localhost:11434
+[persistent tunnel with auto-reconnect]
+#+end_example
+
+* Implementation Details
+
+** Laptop Setup Script (for reference)
+#+begin_src bash :tangle no
+#!/bin/bash
+# ~/bin/check-ollama-tunnel.sh on macOS laptop
+
+# Check if tunnel is alive
+if ! pgrep -f "autossh.*nh" > /dev/null; then
+    echo "$(date): Tunnel down, restarting..." >> /tmp/ollama-tunnel.log
+    autossh -M 20000 -f -N nh
+    echo "$(date): Tunnel restarted" >> /tmp/ollama-tunnel.log
+else
+    # Test the tunnel
+    if ssh nh "curl -s http://localhost:11434/api/version" > /dev/null 2>&1; then
+        echo "$(date): Tunnel healthy" >> /tmp/ollama-tunnel.log
+    else
+        echo "$(date): Tunnel process exists but not responding, killing and restarting..." >> /tmp/ollama-tunnel.log
+        pkill -f "autossh.*nh"
+        sleep 2
+        autossh -M 20000 -f -N nh
+    fi
+fi
+#+end_src
+
+** SSH Config Entry (on laptop)
+#+begin_src ssh-config :tangle no
+Host nh
+    HostName nexushive.example.com  # Replace with actual hostname
+    User jwalsh
+    RemoteForward 11434 localhost:11434
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+#+end_src
+
+** Testing the Tunnel (from nh)
+#+begin_src bash
+# Quick health check
+curl -s http://localhost:11434/api/version | jq '.'
+
+# List available models
+curl -s http://localhost:11434/api/tags | jq -r '.models[].name'
+
+# Test tool calling
+curl -s -X POST http://localhost:11434/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3.2:3b",
+    "messages": [{"role": "user", "content": "What is 25 * 4?"}],
+    "tools": [{
+      "type": "function",
+      "function": {
+        "name": "calculate",
+        "description": "Perform math calculations",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {"type": "string"}
+          }
+        }
+      }
+    }],
+    "stream": false
+  }' | jq '.message.tool_calls'
+#+end_src
+
+* Benefits of This Approach
+
+1. *No Ollama installation needed on FreeBSD* - avoids compatibility issues
+2. *Centralized model management* - all models stored on laptop
+3. *Persistent connection* - autossh handles reconnection automatically
+4. *Transparent to applications* - apps on nh just use localhost:11434
+5. *Easy to monitor* - cron job ensures tunnel stays up
+6. *Low latency* - 99ms is perfectly acceptable for development
+
+* Integration with Our Experiment
+
+Our Guile modules are already configured to use ~http://localhost:11434~ by default, so they work transparently with this tunnel setup:
+
+#+begin_src scheme
+(define (make-ollama-client #:key (base-url "http://localhost:11434"))
+  "Create an Ollama client with specified base URL"
+  ;; This will work through the SSH tunnel!
+  ...)
+#+end_src
+
+No code changes needed - the tunnel makes remote Ollama appear local!

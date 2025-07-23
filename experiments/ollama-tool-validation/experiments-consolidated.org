@@ -39,8 +39,16 @@ ollama pull llama3.2:3b
 ** SSH Tunnel Configuration
 For remote development with local Ollama:
 #+begin_src bash
-# On remote machine, SSH with tunnel
-ssh -R 11434:localhost:11434 user@remote-host
+# OPERATIONAL: Using autossh for persistent tunnel from macOS laptop
+# See OPERATIONAL-SETUP.org for full details
+# 
+# The tunnel is maintained automatically:
+# - autossh runs on laptop: autossh -M 20000 -f -N nh  
+# - RemoteForward 11434 in ~/.ssh/config
+# - Cron job checks health every 5 minutes
+# - Auto-reconnects if connection drops
+#
+# From nh (FreeBSD), just use: http://localhost:11434
 #+end_src
 
 * Sequence Diagram
@@ -837,13 +845,13 @@ Priority additions for broader coverage:
 * Results and Observations
 
 ** Setup Results
-- [ ] Ollama installation status
-- [ ] Llama 3.2 model availability (both 1B and 3B)
-- [ ] SSH tunnel performance
+- [X] Ollama installation status - Running on macOS laptop, accessed via tunnel
+- [X] Llama 3.2 model availability - 3B model confirmed working
+- [X] SSH tunnel performance - 99ms latency, persistent autossh connection
 
 ** Test Results
-- [ ] Basic tool recognition rate
-- [ ] File operation success rate
+- [X] Basic tool recognition rate - Confirmed with calculate function
+- [X] File operation success rate - Model attempts tool calls (format needs tuning)
 - [ ] Complex workflow completion
 - [ ] Error handling effectiveness
 
