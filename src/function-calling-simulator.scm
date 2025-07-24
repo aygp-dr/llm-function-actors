@@ -59,6 +59,13 @@
             (format #t "Final Answer: ~a~%" answer)
             (loop 'complete)]
            
+           [($ <message> 'function-result content sender)
+            ;; Log function result (this might be echoed back from channel)
+            (format #t "Application: Function ~a returned ~a~%" 
+                    (assoc-ref content 'function)
+                    (assoc-ref content 'result))
+            (loop state)]
+           
            [msg
             (format #t "Application: Unexpected message ~a~%" msg)
             (loop state)]))]
@@ -102,6 +109,9 @@
                             (make-message 'final-answer
                                           (format #f "Based on the calculation, the result is: ~a" result)
                                           'llm)))]
+           [($ <message> 'function-call content sender)
+            ;; Ignore our own function call message and wait for the actual result
+            (receive-message app-channel)]
            [msg
             (format #t "LLM: Unexpected message while waiting for result: ~a~%" msg)]))]
       [else

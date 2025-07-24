@@ -103,6 +103,13 @@
         [($ <message> 'shutdown _ _)
          #t]
         
+        [($ <message> 'function-result content sender)
+         ;; Log function result (this might be echoed back from channel)
+         (format #t "Application: Function ~a returned ~a~%" 
+                 (assoc-ref content 'function)
+                 (assoc-ref content 'result))
+         (loop)]
+        
         [msg
          (format #t "Application: Unexpected message ~a~%" msg)
          (loop)]))))
